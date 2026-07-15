@@ -54,7 +54,7 @@ const SCENE_DEFINITIONS = [
         comparisonDateKey: "2020-04-10",
         explorationEnabled: false,
         interactionGuidance:
-            "Use the comparison control to move between April and July without leaving this scene.",
+            "Hover over states to compare the July hotspot pattern with the national rate.",
     },
     {
         sceneIndex: 3,
@@ -138,6 +138,46 @@ const mapDateLabelSelection = d3.select(
 
 const interactionGuidanceSelection = d3.select(
     "#interaction-guidance"
+);
+
+const sceneCounterSelection = d3.select(
+    "#scene-counter"
+);
+
+const sceneProgressButtonSelection = d3.selectAll(
+    ".scene-progress-button"
+);
+
+const sceneKickerSelection = d3.select(
+    "#scene-kicker"
+);
+
+const sceneTitleSelection = d3.select(
+    "#scene-title"
+);
+
+const sceneDescriptionSelection = d3.select(
+    "#scene-description"
+);
+
+const annotationTextSelection = d3.select(
+    "#annotation-text"
+);
+
+const timelineDateLabelSelection = d3.select(
+    "#timeline-date-label"
+);
+
+const previousSceneButtonSelection = d3.select(
+    "#previous-scene-button"
+);
+
+const nextSceneButtonSelection = d3.select(
+    "#next-scene-button"
+);
+
+const explorationControlsSelection = d3.select(
+    "#exploration-controls"
 );
 
 const MAP_COLOR_THRESHOLDS = [
@@ -724,6 +764,303 @@ function initializeStateParameters(
     );
 }
 
+function updateSceneNavigationControls() {
+    const currentSceneIndex =
+        visualizationState.currentSceneIndex;
+
+    previousSceneButtonSelection.property(
+        "disabled",
+        currentSceneIndex === 0
+        || visualizationState.isTransitioning
+    );
+
+    nextSceneButtonSelection.property(
+        "disabled",
+        currentSceneIndex
+            === SCENE_DEFINITIONS.length - 1
+        || visualizationState.isTransitioning
+    );
+
+    sceneProgressButtonSelection
+        .property(
+            "disabled",
+            visualizationState.isTransitioning
+        )
+        .classed(
+            "active",
+            function () {
+                return Number(
+                    this.dataset.sceneIndex
+                ) === currentSceneIndex;
+            }
+        )
+        .attr(
+            "aria-current",
+            function () {
+                return Number(
+                    this.dataset.sceneIndex
+                ) === currentSceneIndex
+                    ? "step"
+                    : null;
+            }
+        );
+}
+
+function updateSceneText(sceneDefinition) {
+    sceneCounterSelection.text(
+        `Scene ${
+            sceneDefinition.sceneIndex + 1
+        } of ${SCENE_DEFINITIONS.length}`
+    );
+
+    sceneKickerSelection.text(
+        sceneDefinition.kicker
+    );
+
+    sceneTitleSelection.text(
+        sceneDefinition.title
+    );
+
+    sceneDescriptionSelection.text(
+        sceneDefinition.description
+    );
+
+    annotationTextSelection.text(
+        sceneDefinition.annotation
+    );
+
+    interactionGuidanceSelection.text(
+        sceneDefinition.interactionGuidance
+    );
+}
+
+function getSceneSelectedDate(
+    sceneDefinition
+) {
+    if (
+        sceneDefinition.selectedDateKey
+        === null
+    ) {
+        return visualizationData
+            .nationalDataRows[0].date;
+    }
+
+    const nationalDataRow =
+        visualizationData
+            .nationalDataByDate
+            .get(
+                sceneDefinition
+                    .selectedDateKey
+            );
+
+    if (nationalDataRow === undefined) {
+        throw new Error(
+            `No national data exists for scene date ${sceneDefinition.selectedDateKey}.`
+        );
+    }
+
+    return nationalDataRow.date;
+}
+
+function updateDateControls() {
+    const selectedDateKey =
+        formatDateKey(
+            visualizationState.selectedDate
+        );
+
+    const selectedDateIndex =
+        visualizationData
+            .nationalDataRows
+            .findIndex(
+                (nationalDataRow) =>
+                    nationalDataRow.dateKey
+                    === selectedDateKey
+            );
+
+    if (selectedDateIndex >= 0) {
+        dateSliderControl.property(
+            "value",
+            selectedDateIndex
+        );
+    }
+
+    selectedDateOutputSelection.text(
+        formatFullDate(
+            visualizationState.selectedDate
+        )
+    );
+}
+
+function applyScene(
+    requestedSceneIndex
+) {
+    if (visualizationData === null) {
+        return;
+    }
+
+    const boundedSceneIndex = Math.max(
+        0,
+        Math.min(
+            SCENE_DEFINITIONS.length - 1,
+            requestedSceneIndex
+        )
+    );
+
+    const sceneDefinition =
+        SCENE_DEFINITIONS[
+            boundedSceneIndex
+        ];
+
+    visualizationState.currentSceneIndex =
+        boundedSceneIndex;
+
+    visualizationState.selectedDate =
+        getSceneSelectedDate(
+            sceneDefinition
+        );
+
+    visualizationState.selectedState =
+        null;
+
+    visualizationState.hoveredState =
+        null;
+
+    visualizationState.comparisonDate =
+        sceneDefinition.comparisonDateKey
+            === null
+            ? null
+            : visualizationData
+                .nationalDataByDate
+                .get(
+                    sceneDefinition
+                        .comparisonDateKey
+                )
+                .date;
+
+    visualizationState.explorationEnabled =
+        sceneDefinition
+            .explorationEnabled;
+
+    stateSelectionControl.property(
+        "value",
+        ""
+    );
+
+    updateSceneText(
+        sceneDefinition
+    );
+
+    updateDateControls();
+
+    updateSceneNavigationControls();
+
+    /*
+     * The final-scene controls remain hidden until
+     * their triggers are implemented in a later step.
+     */
+    explorationControlsSelection.property(
+        "hidden",
+        true
+    );
+
+    if (boundedSceneIndex === 0) {
+        timelineDateLabelSelection.text(
+            "January 2020–March 2023"
+        );
+    } else {
+        timelineDateLabelSelection.text(
+            formatFullDate(
+                visualizationState
+                    .selectedDate
+            )
+        );
+    }
+
+    hideChartTooltip();
+
+    renderStateMap();
+
+    console.log(
+        `Changed to scene ${
+            boundedSceneIndex + 1
+        }:`,
+        visualizationState
+    );
+}
+
+function initializeSceneTriggers() {
+    previousSceneButtonSelection.on(
+        "click",
+        () => {
+            applyScene(
+                visualizationState
+                    .currentSceneIndex - 1
+            );
+        }
+    );
+
+    nextSceneButtonSelection.on(
+        "click",
+        () => {
+            applyScene(
+                visualizationState
+                    .currentSceneIndex + 1
+            );
+        }
+    );
+
+    sceneProgressButtonSelection.on(
+        "click",
+        function () {
+            applyScene(
+                Number(
+                    this.dataset.sceneIndex
+                )
+            );
+        }
+    );
+
+    window.addEventListener(
+        "keydown",
+        (keyboardEvent) => {
+            const activeElement =
+                document.activeElement;
+
+            const isFormControl =
+                activeElement
+                instanceof HTMLInputElement
+                || activeElement
+                instanceof HTMLSelectElement;
+
+            if (isFormControl) {
+                return;
+            }
+
+            if (
+                keyboardEvent.key
+                === "ArrowRight"
+            ) {
+                applyScene(
+                    visualizationState
+                        .currentSceneIndex
+                        + 1
+                );
+            }
+
+            if (
+                keyboardEvent.key
+                === "ArrowLeft"
+            ) {
+                applyScene(
+                    visualizationState
+                        .currentSceneIndex
+                        - 1
+                );
+            }
+        }
+    );
+}
+
 function renderNationalTimeline() {
     if (visualizationData === null) {
         return;
@@ -1153,6 +1490,10 @@ function renderStateMap() {
                     chartWidth * 0.57
                 )
             );
+    
+    const isNationalOverviewScene =
+        visualizationState
+            .currentSceneIndex === 0;        
 
     const selectedDateKey =
         formatDateKey(
@@ -1303,6 +1644,12 @@ function renderStateMap() {
                 "fill",
                 (mapFeatureRow) => {
                     if (
+                        isNationalOverviewScene
+                    ) {
+                        return MAP_COLOR_RANGE[0];
+                    }
+
+                    if (
                         mapFeatureRow
                             .stateDataRow
                         === undefined
@@ -1317,7 +1664,12 @@ function renderStateMap() {
                     );
                 }
             )
-            .attr("tabindex", 0)
+            .attr(
+                "tabindex",
+                isNationalOverviewScene
+                    ? -1
+                    : 0
+            )
             .attr(
                 "role",
                 "button"
@@ -1360,6 +1712,10 @@ function renderStateMap() {
         pointerEvent,
         mapFeatureRow
     ) {
+        if (isNationalOverviewScene) {
+            return;
+        }
+
         const stateDataRow =
             mapFeatureRow.stateDataRow;
 
@@ -1531,16 +1887,21 @@ function renderStateMap() {
             "end"
         )
         .text(
-            `Seven-day average on ${formatFullDate(
-                visualizationState
-                    .selectedDate
-            )}`
+            isNationalOverviewScene
+                ? "Geographic detail begins in Scene 2"
+                : `Seven-day average on ${formatFullDate(
+                    visualizationState
+                        .selectedDate
+                )}`
         );
 
     mapDateLabelSelection.text(
-        formatFullDate(
-            visualizationState.selectedDate
-        )
+        isNationalOverviewScene
+            ? "Geographic detail begins in Scene 2"
+            : formatFullDate(
+                visualizationState
+                    .selectedDate
+            )
     );
 }
 
@@ -1708,16 +2069,13 @@ async function initializeVisualization() {
 
     renderNationalTimeline();
 
-    renderStateMap();
-
     initializeTimelineResizeObserver();
 
     initializeMapResizeObserver();
 
-    interactionGuidanceSelection.text(
-        SCENE_DEFINITIONS[0]
-            .interactionGuidance
-    );
+    initializeSceneTriggers();
+
+    applyScene(0);
 
     applicationStatusSelection.text(
         `Loaded ${formatWholeNumber(nationalDataRows.length)} national dates, ${formatWholeNumber(stateDataRows.length)} state records, and ${stateFeatures.length} map features.`
