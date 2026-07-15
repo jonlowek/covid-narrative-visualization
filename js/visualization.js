@@ -120,6 +120,10 @@ const selectedDateOutputSelection = d3.select(
     "#selected-date-output"
 );
 
+const resetExplorationButtonSelection = d3.select(
+    "#reset-exploration-button"
+);
+
 const timelineChartSelection = d3.select(
     "#timeline-chart"
 );
@@ -796,6 +800,37 @@ function initializeStateParameters(
     );
 }
 
+function updateExplorationControls() {
+    const explorationIsAvailable =
+        visualizationState.currentSceneIndex === 3;
+
+    explorationControlsSelection.property(
+        "hidden",
+        !explorationIsAvailable
+    );
+
+    dateSliderControl.property(
+        "disabled",
+        !explorationIsAvailable
+        || visualizationState.isTransitioning
+    );
+
+    resetExplorationButtonSelection.property(
+        "disabled",
+        !explorationIsAvailable
+        || visualizationState.isTransitioning
+    );
+
+    /*
+     * State comparison will be enabled in the next
+     * implementation step.
+     */
+    stateSelectionControl.property(
+        "disabled",
+        true
+    );
+}
+
 function updateComparisonControls() {
     const comparisonIsAvailable =
         visualizationState.currentSceneIndex === 2;
@@ -964,6 +999,200 @@ function updateDateControls() {
         formatFullDate(
             visualizationState.selectedDate
         )
+    );
+}
+
+function updateSceneFourExplorationText() {
+    if (
+        visualizationData === null
+        || visualizationState.currentSceneIndex !== 3
+        || visualizationState.selectedDate === null
+    ) {
+        return;
+    }
+
+    const selectedDateKey = formatDateKey(
+        visualizationState.selectedDate
+    );
+
+    const nationalDataRow =
+        visualizationData
+            .nationalDataByDate
+            .get(selectedDateKey);
+
+    const stateRecordsForDate =
+        visualizationData
+            .stateRowsByDate
+            .get(selectedDateKey);
+
+    if (
+        nationalDataRow === undefined
+        || stateRecordsForDate === undefined
+    ) {
+        return;
+    }
+
+    const rankedStateRecords = Array.from(
+        stateRecordsForDate.values()
+    ).sort(
+        (
+            firstStateRecord,
+            secondStateRecord
+        ) =>
+            d3.descending(
+                firstStateRecord
+                    .casesAveragePer100k,
+                secondStateRecord
+                    .casesAveragePer100k
+            )
+    );
+
+    const highestStateRecord =
+        rankedStateRecords[0];
+
+    const jurisdictionsAbove50 =
+        rankedStateRecords.filter(
+            (stateRecord) =>
+                stateRecord
+                    .casesAveragePer100k
+                > 50
+        ).length;
+
+    const jurisdictionsAbove100 =
+        rankedStateRecords.filter(
+            (stateRecord) =>
+                stateRecord
+                    .casesAveragePer100k
+                > 100
+        ).length;
+
+    sceneDescriptionSelection.text(
+        `On ${formatFullDate(
+            nationalDataRow.date
+        )}, the national seven-day average was ${formatRate(
+            nationalDataRow
+                .casesAveragePer100k
+        )} reported cases per 100,000.`
+    );
+
+    annotationTextSelection.text(
+        `${highestStateRecord.stateName} had the highest state rate at ${formatRate(
+            highestStateRecord
+                .casesAveragePer100k
+        )} per 100,000. ${jurisdictionsAbove50} of 51 jurisdictions exceeded 50, and ${jurisdictionsAbove100} exceeded 100.`
+    );
+
+    interactionGuidanceSelection.text(
+        "Move the date slider to examine how the geographic pattern changed, or reset to the January 2022 peak."
+    );
+}
+
+async function applySceneFourDateIndex(
+    requestedDateIndex,
+    {
+        animateMap = false,
+        restoreNarrative = false,
+    } = {}
+) {
+    if (
+        visualizationData === null
+        || visualizationState.currentSceneIndex !== 3
+        || visualizationState.isTransitioning
+    ) {
+        return;
+    }
+
+    const boundedDateIndex = Math.max(
+        0,
+        Math.min(
+            visualizationData
+                .nationalDataRows.length - 1,
+            requestedDateIndex
+        )
+    );
+
+    const requestedNationalDataRow =
+        visualizationData
+            .nationalDataRows[
+                boundedDateIndex
+            ];
+
+    const previousDate =
+        visualizationState.selectedDate;
+
+    const dateChanged =
+        previousDate === null
+        || previousDate.getTime()
+            !== requestedNationalDataRow
+                .date.getTime();
+
+    if (
+        !dateChanged
+        && !restoreNarrative
+    ) {
+        return;
+    }
+
+    const shouldAnimate =
+        animateMap && dateChanged;
+
+    visualizationState.isTransitioning =
+        shouldAnimate;
+
+    visualizationState.selectedDate =
+        requestedNationalDataRow.date;
+
+    visualizationState.hoveredState =
+        null;
+
+    updateDateControls();
+
+    timelineDateLabelSelection.text(
+        formatFullDate(
+            visualizationState.selectedDate
+        )
+    );
+
+    if (restoreNarrative) {
+        updateSceneText(
+            SCENE_DEFINITIONS[3]
+        );
+    } else {
+        updateSceneFourExplorationText();
+    }
+
+    updateSceneNavigationControls();
+    updateComparisonControls();
+    updateExplorationControls();
+    hideChartTooltip();
+
+    try {
+        await Promise.all([
+            renderStateMap({
+                previousDate,
+                previousSceneIndex: 3,
+                animateMap:
+                    shouldAnimate,
+            }),
+
+            updateTimelineSceneMarker(
+                shouldAnimate
+            ),
+        ]);
+    } finally {
+        visualizationState.isTransitioning =
+            false;
+
+        updateSceneNavigationControls();
+        updateComparisonControls();
+        updateExplorationControls();
+    }
+
+    console.log(
+        `Scene 4 exploration changed to ${
+            requestedNationalDataRow.dateKey
+        }:`,
+        visualizationState
     );
 }
 
@@ -1154,12 +1383,8 @@ async function applyScene(
 
     updateSceneNavigationControls();
 
-    explorationControlsSelection.property(
-        "hidden",
-        true
-    );
-
     updateComparisonControls();
+    updateExplorationControls();
 
     if (boundedSceneIndex === 0) {
         timelineDateLabelSelection.text(
@@ -1195,6 +1420,7 @@ async function applyScene(
 
         updateSceneNavigationControls();
         updateComparisonControls();
+        updateExplorationControls();
     }
 
     console.log(
@@ -1242,6 +1468,42 @@ function initializeSceneTriggers() {
         function () {
             applySceneThreeComparisonDate(
                 this.dataset.comparisonDate
+            );
+        }
+    );
+
+    dateSliderControl.on(
+        "input",
+        function () {
+            applySceneFourDateIndex(
+                Number(this.value),
+                {
+                    animateMap: false,
+                    restoreNarrative: false,
+                }
+            );
+        }
+    );
+
+    resetExplorationButtonSelection.on(
+        "click",
+        () => {
+            const resetDateIndex =
+                visualizationData
+                    .nationalDataRows
+                    .findIndex(
+                        (nationalDataRow) =>
+                            nationalDataRow
+                                .dateKey
+                            === "2022-01-14"
+                    );
+
+            applySceneFourDateIndex(
+                resetDateIndex,
+                {
+                    animateMap: true,
+                    restoreNarrative: true,
+                }
             );
         }
     );
