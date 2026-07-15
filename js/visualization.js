@@ -100,6 +100,135 @@ const selectedDateOutputSelection = d3.select(
     "#selected-date-output"
 );
 
+const timelineChartSelection = d3.select(
+    "#timeline-chart"
+);
+
+const timelineChartContainerSelection = d3.select(
+    "#timeline-chart-container"
+);
+
+const chartTooltipSelection = d3.select(
+    "#chart-tooltip"
+);
+
+const TIMELINE_MARGINS = {
+    top: 18,
+    right: 24,
+    bottom: 46,
+    left: 62,
+};
+
+const timelineViewState = {
+    resizeObserver: null,
+    resizeAnimationFrame: null,
+};
+
+function positionChartTooltip(pointerEvent) {
+    const tooltipNode = chartTooltipSelection.node();
+
+    if (tooltipNode === null) {
+        return;
+    }
+
+    const pointerOffset = 14;
+    const viewportPadding = 12;
+
+    const tooltipWidth = tooltipNode.offsetWidth;
+    const tooltipHeight = tooltipNode.offsetHeight;
+
+    let tooltipLeft =
+        pointerEvent.clientX + pointerOffset;
+
+    let tooltipTop =
+        pointerEvent.clientY + pointerOffset;
+
+    if (
+        tooltipLeft
+        + tooltipWidth
+        + viewportPadding
+        > window.innerWidth
+    ) {
+        tooltipLeft =
+            pointerEvent.clientX
+            - tooltipWidth
+            - pointerOffset;
+    }
+
+    if (
+        tooltipTop
+        + tooltipHeight
+        + viewportPadding
+        > window.innerHeight
+    ) {
+        tooltipTop =
+            pointerEvent.clientY
+            - tooltipHeight
+            - pointerOffset;
+    }
+
+    chartTooltipSelection
+        .style(
+            "left",
+            `${Math.max(
+                viewportPadding,
+                tooltipLeft
+            )}px`
+        )
+        .style(
+            "top",
+            `${Math.max(
+                viewportPadding,
+                tooltipTop
+            )}px`
+        );
+}
+
+function showTimelineTooltip(
+    pointerEvent,
+    nationalDataRow
+) {
+    chartTooltipSelection
+        .property("hidden", false)
+        .html(
+            `
+                <strong>
+                    ${formatFullDate(
+                        nationalDataRow.date
+                    )}
+                </strong>
+                <br>
+                Reported cases:
+                ${formatWholeNumber(
+                    nationalDataRow.casesAverage
+                )}
+                seven-day average
+                <br>
+                Case rate:
+                ${formatRate(
+                    nationalDataRow
+                        .casesAveragePer100k
+                )}
+                per 100,000
+                <br>
+                Death rate:
+                ${formatRate(
+                    nationalDataRow
+                        .deathsAveragePer100k
+                )}
+                per 100,000
+            `
+        );
+
+    positionChartTooltip(pointerEvent);
+}
+
+function hideChartTooltip() {
+    chartTooltipSelection
+        .property("hidden", true)
+        .html("");
+}
+
 function parseRequiredNumber(
     rawValue,
     columnName,
@@ -512,6 +641,401 @@ function initializeStateParameters(
     );
 }
 
+function renderNationalTimeline() {
+    if (visualizationData === null) {
+        return;
+    }
+
+    const timelineContainerNode =
+        timelineChartContainerSelection.node();
+
+    if (timelineContainerNode === null) {
+        return;
+    }
+
+    const containerWidth =
+        timelineContainerNode.clientWidth;
+
+    const chartWidth = Math.max(
+        360,
+        containerWidth
+    );
+
+    const chartHeight =
+        chartWidth < 620
+            ? 250
+            : 280;
+
+    const innerWidth =
+        chartWidth
+        - TIMELINE_MARGINS.left
+        - TIMELINE_MARGINS.right;
+
+    const innerHeight =
+        chartHeight
+        - TIMELINE_MARGINS.top
+        - TIMELINE_MARGINS.bottom;
+
+    const nationalDataRows =
+        visualizationData.nationalDataRows;
+
+    const dateExtent = d3.extent(
+        nationalDataRows,
+        (nationalDataRow) =>
+            nationalDataRow.date
+    );
+
+    const maximumCaseRate = d3.max(
+        nationalDataRows,
+        (nationalDataRow) =>
+            nationalDataRow
+                .casesAveragePer100k
+    );
+
+    const dateScale = d3
+        .scaleUtc()
+        .domain(dateExtent)
+        .range([0, innerWidth]);
+
+    const caseRateScale = d3
+        .scaleLinear()
+        .domain([0, maximumCaseRate])
+        .nice()
+        .range([innerHeight, 0]);
+
+    timelineChartSelection
+        .attr(
+            "viewBox",
+            `0 0 ${chartWidth} ${chartHeight}`
+        )
+        .attr(
+            "preserveAspectRatio",
+            "xMidYMid meet"
+        );
+
+    timelineChartContainerSelection
+        .classed("rendered", true)
+        .style(
+            "height",
+            `${chartHeight}px`
+        );
+
+    timelineChartSelection
+        .selectAll("*")
+        .remove();
+
+    const chartGroup =
+        timelineChartSelection
+            .append("g")
+            .attr(
+                "transform",
+                `translate(
+                    ${TIMELINE_MARGINS.left},
+                    ${TIMELINE_MARGINS.top}
+                )`
+            );
+
+    chartGroup
+        .append("g")
+        .attr("class", "chart-grid")
+        .call(
+            d3
+                .axisLeft(caseRateScale)
+                .ticks(5)
+                .tickSize(-innerWidth)
+                .tickFormat("")
+        );
+
+    const yearTickValues = [
+        parseDate("2020-01-21"),
+        parseDate("2021-01-01"),
+        parseDate("2022-01-01"),
+        parseDate("2023-01-01"),
+    ];
+
+    chartGroup
+        .append("g")
+        .attr(
+            "class",
+            "chart-axis timeline-x-axis"
+        )
+        .attr(
+            "transform",
+            `translate(0, ${innerHeight})`
+        )
+        .call(
+            d3
+                .axisBottom(dateScale)
+                .tickValues(yearTickValues)
+                .tickFormat(
+                    d3.utcFormat("%Y")
+                )
+                .tickSizeOuter(0)
+        );
+
+    chartGroup
+        .append("g")
+        .attr(
+            "class",
+            "chart-axis timeline-y-axis"
+        )
+        .call(
+            d3
+                .axisLeft(caseRateScale)
+                .ticks(5)
+                .tickFormat(
+                    d3.format(",.0f")
+                )
+                .tickSizeOuter(0)
+        );
+
+    chartGroup
+        .append("text")
+        .attr("class", "axis-label")
+        .attr(
+            "transform",
+            "rotate(-90)"
+        )
+        .attr(
+            "x",
+            -innerHeight / 2
+        )
+        .attr("y", -48)
+        .attr(
+            "text-anchor",
+            "middle"
+        )
+        .text(
+            "Cases per 100,000"
+        );
+
+    const nationalAreaGenerator = d3
+        .area()
+        .x(
+            (nationalDataRow) =>
+                dateScale(
+                    nationalDataRow.date
+                )
+        )
+        .y0(innerHeight)
+        .y1(
+            (nationalDataRow) =>
+                caseRateScale(
+                    nationalDataRow
+                        .casesAveragePer100k
+                )
+        )
+        .curve(d3.curveMonotoneX);
+
+    const nationalLineGenerator = d3
+        .line()
+        .x(
+            (nationalDataRow) =>
+                dateScale(
+                    nationalDataRow.date
+                )
+        )
+        .y(
+            (nationalDataRow) =>
+                caseRateScale(
+                    nationalDataRow
+                        .casesAveragePer100k
+                )
+        )
+        .curve(d3.curveMonotoneX);
+
+    chartGroup
+        .append("path")
+        .datum(nationalDataRows)
+        .attr(
+            "class",
+            "national-area"
+        )
+        .attr(
+            "d",
+            nationalAreaGenerator
+        );
+
+    chartGroup
+        .append("path")
+        .datum(nationalDataRows)
+        .attr(
+            "class",
+            "national-line"
+        )
+        .attr(
+            "d",
+            nationalLineGenerator
+        );
+
+    const timelineFocusGroup =
+        chartGroup
+            .append("g")
+            .attr(
+                "class",
+                "timeline-focus"
+            )
+            .style("display", "none");
+
+    const timelineFocusLine =
+        timelineFocusGroup
+            .append("line")
+            .attr(
+                "class",
+                "timeline-focus-line"
+            )
+            .attr("y1", 0)
+            .attr(
+                "y2",
+                innerHeight
+            );
+
+    const timelineFocusPoint =
+        timelineFocusGroup
+            .append("circle")
+            .attr(
+                "class",
+                "timeline-focus-point"
+            )
+            .attr("r", 5);
+
+    const findNearestDateIndex =
+        d3.bisector(
+            (nationalDataRow) =>
+                nationalDataRow.date
+        ).center;
+
+    chartGroup
+        .append("rect")
+        .attr(
+            "class",
+            "timeline-interaction-layer"
+        )
+        .attr("width", innerWidth)
+        .attr("height", innerHeight)
+        .on(
+            "pointerenter",
+            () => {
+                timelineFocusGroup.style(
+                    "display",
+                    null
+                );
+            }
+        )
+        .on(
+            "pointermove",
+            function (pointerEvent) {
+                const [
+                    pointerX
+                ] = d3.pointer(
+                    pointerEvent,
+                    this
+                );
+
+                const hoveredDate =
+                    dateScale.invert(
+                        pointerX
+                    );
+
+                const nearestDateIndex =
+                    findNearestDateIndex(
+                        nationalDataRows,
+                        hoveredDate
+                    );
+
+                const nationalDataRow =
+                    nationalDataRows[
+                        nearestDateIndex
+                    ];
+
+                const focusX =
+                    dateScale(
+                        nationalDataRow.date
+                    );
+
+                const focusY =
+                    caseRateScale(
+                        nationalDataRow
+                            .casesAveragePer100k
+                    );
+
+                timelineFocusLine
+                    .attr("x1", focusX)
+                    .attr("x2", focusX);
+
+                timelineFocusPoint
+                    .attr("cx", focusX)
+                    .attr("cy", focusY);
+
+                showTimelineTooltip(
+                    pointerEvent,
+                    nationalDataRow
+                );
+            }
+        )
+        .on(
+            "pointerleave",
+            () => {
+                timelineFocusGroup.style(
+                    "display",
+                    "none"
+                );
+
+                hideChartTooltip();
+            }
+        );
+}
+
+function initializeTimelineResizeObserver() {
+    const timelineContainerNode =
+        timelineChartContainerSelection.node();
+
+    if (
+        timelineContainerNode === null
+        || timelineViewState.resizeObserver
+            !== null
+    ) {
+        return;
+    }
+
+    if (
+        typeof ResizeObserver
+        === "function"
+    ) {
+        timelineViewState.resizeObserver =
+            new ResizeObserver(() => {
+                if (
+                    timelineViewState
+                        .resizeAnimationFrame
+                    !== null
+                ) {
+                    cancelAnimationFrame(
+                        timelineViewState
+                            .resizeAnimationFrame
+                    );
+                }
+
+                timelineViewState
+                    .resizeAnimationFrame =
+                    requestAnimationFrame(
+                        renderNationalTimeline
+                    );
+            });
+
+        timelineViewState.resizeObserver
+            .observe(
+                timelineContainerNode
+            );
+
+        return;
+    }
+
+    window.addEventListener(
+        "resize",
+        renderNationalTimeline
+    );
+}
+
 async function initializeVisualization() {
     if (
         typeof topojson === "undefined"
@@ -625,6 +1149,10 @@ async function initializeVisualization() {
     populateStateSelection(
         fipsCodeByStateName
     );
+
+    renderNationalTimeline();
+
+    initializeTimelineResizeObserver();
 
     applicationStatusSelection.text(
         `Loaded ${formatWholeNumber(nationalDataRows.length)} national dates, ${formatWholeNumber(stateDataRows.length)} state records, and ${stateFeatures.length} map features.`
