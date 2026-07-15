@@ -639,6 +639,30 @@ h1 {
     pointer-events: all;
 }
 
+.timeline-scene-marker {
+    pointer-events: none;
+}
+
+.timeline-scene-marker-line {
+    stroke: var(--accent-dark);
+    stroke-width: 1.5;
+    stroke-dasharray: 5 4;
+    vector-effect: non-scaling-stroke;
+}
+
+.timeline-scene-marker-point {
+    fill: var(--accent-dark);
+    stroke: #ffffff;
+    stroke-width: 2.2;
+    vector-effect: non-scaling-stroke;
+}
+
+.timeline-scene-marker-label {
+    fill: var(--accent-dark);
+    font-size: 0.74rem;
+    font-weight: 750;
+}
+
 .state-shape {
     stroke: #ffffff;
     stroke-width: 0.85;

@@ -122,6 +122,10 @@ const TIMELINE_MARGINS = {
 const timelineViewState = {
     resizeObserver: null,
     resizeAnimationFrame: null,
+    dateScale: null,
+    caseRateScale: null,
+    innerWidth: 0,
+    innerHeight: 0,
 };
 
 const mapChartSelection = d3.select(
@@ -891,10 +895,14 @@ function updateDateControls() {
     );
 }
 
-function applyScene(
+async function applyScene(
     requestedSceneIndex
 ) {
-    if (visualizationData === null) {
+    if (
+        visualizationData === null
+        || visualizationState
+            .isTransitioning
+    ) {
         return;
     }
 
@@ -910,6 +918,21 @@ function applyScene(
         SCENE_DEFINITIONS[
             boundedSceneIndex
         ];
+
+    const previousDate =
+        visualizationState.selectedDate;
+
+    const previousSceneIndex =
+        visualizationState
+            .currentSceneIndex;
+
+    const shouldAnimate =
+        previousDate !== null
+        && previousSceneIndex
+            !== boundedSceneIndex;
+
+    visualizationState.isTransitioning =
+        shouldAnimate;
 
     visualizationState.currentSceneIndex =
         boundedSceneIndex;
@@ -954,10 +977,6 @@ function applyScene(
 
     updateSceneNavigationControls();
 
-    /*
-     * The final-scene controls remain hidden until
-     * their triggers are implemented in a later step.
-     */
     explorationControlsSelection.property(
         "hidden",
         true
@@ -978,7 +997,25 @@ function applyScene(
 
     hideChartTooltip();
 
-    renderStateMap();
+    try {
+        await Promise.all([
+            renderStateMap({
+                previousDate,
+                previousSceneIndex,
+                animateMap:
+                    shouldAnimate,
+            }),
+
+            updateTimelineSceneMarker(
+                shouldAnimate
+            ),
+        ]);
+    } finally {
+        visualizationState.isTransitioning =
+            false;
+
+        updateSceneNavigationControls();
+    }
 
     console.log(
         `Changed to scene ${
@@ -1061,6 +1098,199 @@ function initializeSceneTriggers() {
     );
 }
 
+function updateTimelineSceneMarker(
+    animateMarker = true
+) {
+    if (
+        visualizationData === null
+        || timelineViewState.dateScale === null
+        || timelineViewState.caseRateScale === null
+        || visualizationState.selectedDate === null
+    ) {
+        return Promise.resolve();
+    }
+
+    const markerGroup =
+        timelineChartSelection.select(
+            ".timeline-scene-marker"
+        );
+
+    if (markerGroup.empty()) {
+        return Promise.resolve();
+    }
+
+    const isOverviewScene =
+        visualizationState.currentSceneIndex === 0;
+
+    if (isOverviewScene) {
+        if (!animateMarker) {
+            markerGroup
+                .style("display", "none")
+                .style("opacity", 0);
+
+            return Promise.resolve();
+        }
+
+        return markerGroup
+            .transition()
+            .duration(250)
+            .style("opacity", 0)
+            .end()
+            .catch(() => undefined)
+            .then(() => {
+                markerGroup.style(
+                    "display",
+                    "none"
+                );
+            });
+    }
+
+    const selectedDateKey = formatDateKey(
+        visualizationState.selectedDate
+    );
+
+    const nationalDataRow =
+        visualizationData
+            .nationalDataByDate
+            .get(selectedDateKey);
+
+    if (nationalDataRow === undefined) {
+        return Promise.resolve();
+    }
+
+    const markerX =
+        timelineViewState.dateScale(
+            nationalDataRow.date
+        );
+
+    const markerY =
+        timelineViewState.caseRateScale(
+            nationalDataRow
+                .casesAveragePer100k
+        );
+
+    const placeLabelOnLeft =
+        markerX
+        > timelineViewState.innerWidth - 130;
+
+    const markerLabelX =
+        placeLabelOnLeft
+            ? markerX - 8
+            : markerX + 8;
+
+    const markerLabelAnchor =
+        placeLabelOnLeft
+            ? "end"
+            : "start";
+
+    const markerLine =
+        markerGroup.select(
+            ".timeline-scene-marker-line"
+        );
+
+    const markerPoint =
+        markerGroup.select(
+            ".timeline-scene-marker-point"
+        );
+
+    const markerLabel =
+        markerGroup.select(
+            ".timeline-scene-marker-label"
+        );
+
+    const markerWasHidden =
+        markerGroup.style("display") === "none";
+
+    markerGroup.style("display", null);
+
+    markerLabel
+        .attr(
+            "text-anchor",
+            markerLabelAnchor
+        )
+        .text(
+            formatFullDate(
+                nationalDataRow.date
+            )
+        );
+
+    if (
+        !animateMarker
+        || markerWasHidden
+    ) {
+        markerLine
+            .attr("x1", markerX)
+            .attr("x2", markerX)
+            .attr("y1", 0)
+            .attr(
+                "y2",
+                timelineViewState.innerHeight
+            );
+
+        markerPoint
+            .attr("cx", markerX)
+            .attr("cy", markerY);
+
+        markerLabel
+            .attr("x", markerLabelX)
+            .attr("y", 14);
+
+        if (!animateMarker) {
+            markerGroup.style("opacity", 1);
+            return Promise.resolve();
+        }
+
+        markerGroup.style("opacity", 0);
+
+        return markerGroup
+            .transition()
+            .duration(350)
+            .style("opacity", 1)
+            .end()
+            .catch(() => undefined);
+    }
+
+    const markerTransition = d3
+        .transition()
+        .duration(750)
+        .ease(d3.easeCubicInOut);
+
+    const groupTransition =
+        markerGroup
+            .transition(markerTransition)
+            .style("opacity", 1);
+
+    const lineTransition =
+        markerLine
+            .transition(markerTransition)
+            .attr("x1", markerX)
+            .attr("x2", markerX)
+            .attr("y1", 0)
+            .attr(
+                "y2",
+                timelineViewState.innerHeight
+            );
+
+    const pointTransition =
+        markerPoint
+            .transition(markerTransition)
+            .attr("cx", markerX)
+            .attr("cy", markerY);
+
+    const labelTransition =
+        markerLabel
+            .transition(markerTransition)
+            .attr("x", markerLabelX)
+            .attr("y", 14);
+
+    return Promise.all([
+        groupTransition.end(),
+        lineTransition.end(),
+        pointTransition.end(),
+        labelTransition.end(),
+    ]).catch(() => undefined);
+}
+
 function renderNationalTimeline() {
     if (visualizationData === null) {
         return;
@@ -1122,6 +1352,18 @@ function renderNationalTimeline() {
         .domain([0, maximumCaseRate])
         .nice()
         .range([innerHeight, 0]);
+
+    timelineViewState.dateScale =
+        dateScale;
+
+    timelineViewState.caseRateScale =
+        caseRateScale;
+
+    timelineViewState.innerWidth =
+        innerWidth;
+
+    timelineViewState.innerHeight =
+        innerHeight;
 
     timelineChartSelection
         .attr(
@@ -1287,6 +1529,38 @@ function renderNationalTimeline() {
             "d",
             nationalLineGenerator
         );
+    
+    const timelineSceneMarkerGroup =
+        chartGroup
+            .append("g")
+            .attr(
+                "class",
+                "timeline-scene-marker"
+            )
+            .style("display", "none")
+            .style("opacity", 0);
+
+    timelineSceneMarkerGroup
+        .append("line")
+        .attr(
+            "class",
+            "timeline-scene-marker-line"
+        );
+
+    timelineSceneMarkerGroup
+        .append("circle")
+        .attr(
+            "class",
+            "timeline-scene-marker-point"
+        )
+        .attr("r", 5);
+
+    timelineSceneMarkerGroup
+        .append("text")
+        .attr(
+            "class",
+            "timeline-scene-marker-label"
+        );
 
     const timelineFocusGroup =
         chartGroup
@@ -1404,6 +1678,8 @@ function renderNationalTimeline() {
                 hideChartTooltip();
             }
         );
+
+    updateTimelineSceneMarker(false);
 }
 
 function initializeTimelineResizeObserver() {
@@ -1456,7 +1732,11 @@ function initializeTimelineResizeObserver() {
     );
 }
 
-function renderStateMap() {
+function renderStateMap({
+    previousDate = null,
+    previousSceneIndex = null,
+    animateMap = false,
+} = {}) {
     if (
         visualizationData === null
         || visualizationState.selectedDate
@@ -1493,7 +1773,15 @@ function renderStateMap() {
     
     const isNationalOverviewScene =
         visualizationState
-            .currentSceneIndex === 0;        
+            .currentSceneIndex === 0;
+            
+    const previousDateKey =
+        previousDate === null
+            ? null
+            : formatDateKey(previousDate);
+
+    const previousWasOverviewScene =
+        previousSceneIndex === 0;
 
     const selectedDateKey =
         formatDateKey(
@@ -1516,6 +1804,37 @@ function renderStateMap() {
     ) {
         throw new Error(
             `Map data was not found for ${selectedDateKey}.`
+        );
+    }
+
+    function getMapFill(
+        mapFeatureRow,
+        dateKey,
+        overviewScene
+    ) {
+        if (overviewScene) {
+            return MAP_COLOR_RANGE[0];
+        }
+
+        if (dateKey === null) {
+            return MAP_COLOR_RANGE[0];
+        }
+
+        const stateRecord =
+            visualizationData
+                .stateRowsByDate
+                .get(dateKey)
+                ?.get(
+                    mapFeatureRow
+                        .stateFeature.id
+                );
+
+        if (stateRecord === undefined) {
+            return "#e5e7eb";
+        }
+
+        return mapColorScale(
+            stateRecord.casesAveragePer100k
         );
     }
 
@@ -1644,23 +1963,20 @@ function renderStateMap() {
                 "fill",
                 (mapFeatureRow) => {
                     if (
+                        animateMap
+                        && previousDateKey !== null
+                    ) {
+                        return getMapFill(
+                            mapFeatureRow,
+                            previousDateKey,
+                            previousWasOverviewScene
+                        );
+                    }
+
+                    return getMapFill(
+                        mapFeatureRow,
+                        selectedDateKey,
                         isNationalOverviewScene
-                    ) {
-                        return MAP_COLOR_RANGE[0];
-                    }
-
-                    if (
-                        mapFeatureRow
-                            .stateDataRow
-                        === undefined
-                    ) {
-                        return "#e5e7eb";
-                    }
-
-                    return mapColorScale(
-                        mapFeatureRow
-                            .stateDataRow
-                            .casesAveragePer100k
                     );
                 }
             )
@@ -1707,6 +2023,31 @@ function renderStateMap() {
                     );
                 }
             );
+    
+    let mapTransitionPromise =
+        Promise.resolve();
+
+    if (animateMap) {
+        const mapTransition =
+            statePathSelection
+                .transition()
+                .duration(750)
+                .ease(d3.easeCubicInOut)
+                .attr(
+                    "fill",
+                    (mapFeatureRow) =>
+                        getMapFill(
+                            mapFeatureRow,
+                            selectedDateKey,
+                            isNationalOverviewScene
+                        )
+                );
+
+        mapTransitionPromise =
+            mapTransition
+                .end()
+                .catch(() => undefined);
+    }        
 
     function displayStateDetails(
         pointerEvent,
@@ -1903,6 +2244,8 @@ function renderStateMap() {
                     .selectedDate
             )
     );
+
+    return mapTransitionPromise;
 }
 
 function initializeMapResizeObserver() {
@@ -1937,7 +2280,11 @@ function initializeMapResizeObserver() {
                 mapViewState
                     .resizeAnimationFrame =
                     requestAnimationFrame(
-                        renderStateMap
+                        () => {
+                            renderStateMap({
+                                animateMap: false,
+                            });
+                        }
                     );
             });
 
@@ -1949,7 +2296,11 @@ function initializeMapResizeObserver() {
 
     window.addEventListener(
         "resize",
-        renderStateMap
+        () => {
+            renderStateMap({
+                animateMap: false,
+            });
+        }
     );
 }
 
