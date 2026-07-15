@@ -6,7 +6,7 @@ January 2020 and March 2023.
 
 ## Public visualization
 
-The GitHub Pages URL will be added here after deployment.
+[View the interactive narrative visualization](https://jonlowek.github.io/covid-narrative-visualization/)
 
 ## Message
 
