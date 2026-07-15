@@ -2,38 +2,455 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <meta
+        name="description"
+        content="An interactive D3 narrative visualization showing how reported COVID-19 hotspots moved across the United States from January 2020 through March 2023."
+    >
 
     <title>One Curve, Fifty Outbreaks</title>
 
     <link rel="stylesheet" href="css/styles.css">
 </head>
+
 <body>
     <main class="page-container">
         <header class="page-header">
-            <p class="eyebrow">A narrative visualization of the COVID-19 pandemic</p>
+            <p class="eyebrow">
+                A narrative visualization of the COVID-19 pandemic
+            </p>
 
             <h1>One Curve, Fifty Outbreaks</h1>
 
             <p class="subtitle">
-                How reported COVID-19 hotspots moved across the United States,
-                January 2020–March 2023
+                How reported COVID-19 hotspots moved across the
+                United States, January 2020–March 2023
             </p>
         </header>
 
         <section
-            id="visualization-container"
-            aria-labelledby="visualization-heading"
+            id="narrative-visualization"
+            class="visualization-card"
+            aria-labelledby="scene-title"
         >
-            <h2 id="visualization-heading">Visualization setup</h2>
+            <div class="visualization-status-row">
+                <p
+                    id="application-status"
+                    class="application-status"
+                    role="status"
+                    aria-live="polite"
+                >
+                    Loading visualization assets…
+                </p>
 
-            <p id="application-status" role="status">
-                Loading D3…
+                <p
+                    id="scene-counter"
+                    class="scene-counter"
+                    aria-live="polite"
+                >
+                    Scene 1 of 4
+                </p>
+            </div>
+
+            <nav
+                class="scene-progress"
+                aria-label="Narrative scenes"
+            >
+                <ol class="scene-progress-list">
+                    <li>
+                        <button
+                            class="scene-progress-button active"
+                            type="button"
+                            data-scene-index="0"
+                            aria-label="Scene 1: The national curve"
+                            aria-current="step"
+                            disabled
+                        >
+                            <span class="progress-number">1</span>
+                            <span class="progress-label">
+                                National curve
+                            </span>
+                        </button>
+                    </li>
+
+                    <li>
+                        <button
+                            class="scene-progress-button"
+                            type="button"
+                            data-scene-index="1"
+                            aria-label="Scene 2: The first wave"
+                            disabled
+                        >
+                            <span class="progress-number">2</span>
+                            <span class="progress-label">
+                                First wave
+                            </span>
+                        </button>
+                    </li>
+
+                    <li>
+                        <button
+                            class="scene-progress-button"
+                            type="button"
+                            data-scene-index="2"
+                            aria-label="Scene 3: The hotspot moved"
+                            disabled
+                        >
+                            <span class="progress-number">3</span>
+                            <span class="progress-label">
+                                Hotspot moved
+                            </span>
+                        </button>
+                    </li>
+
+                    <li>
+                        <button
+                            class="scene-progress-button"
+                            type="button"
+                            data-scene-index="3"
+                            aria-label="Scene 4: The broadest wave"
+                            disabled
+                        >
+                            <span class="progress-number">4</span>
+                            <span class="progress-label">
+                                Broadest wave
+                            </span>
+                        </button>
+                    </li>
+                </ol>
+            </nav>
+
+            <div class="scene-layout">
+                <aside
+                    id="narrative-panel"
+                    class="narrative-panel"
+                    aria-label="Current scene explanation"
+                >
+                    <p
+                        id="scene-kicker"
+                        class="scene-kicker"
+                    >
+                        The national picture
+                    </p>
+
+                    <h2 id="scene-title">
+                        The United States experienced several
+                        distinct waves
+                    </h2>
+
+                    <p
+                        id="scene-description"
+                        class="scene-description"
+                    >
+                        The national curve summarizes the pandemic,
+                        but it cannot show where each wave was
+                        concentrated.
+                    </p>
+
+                    <section
+                        id="annotation-panel"
+                        class="annotation-panel"
+                        aria-labelledby="annotation-heading"
+                    >
+                        <h3 id="annotation-heading">
+                            What to notice
+                        </h3>
+
+                        <p id="annotation-text">
+                            The geography of the pandemic changed
+                            substantially even when the country was
+                            described using one national line.
+                        </p>
+                    </section>
+
+                    <section
+                        id="exploration-controls"
+                        class="exploration-controls"
+                        aria-labelledby="exploration-heading"
+                        hidden
+                    >
+                        <h3 id="exploration-heading">
+                            Explore the data
+                        </h3>
+
+                        <div class="control-group">
+                            <label for="state-selection">
+                                Compare a state
+                            </label>
+
+                            <select
+                                id="state-selection"
+                                disabled
+                            >
+                                <option value="">
+                                    Select a state
+                                </option>
+                            </select>
+                        </div>
+
+                        <div class="control-group">
+                            <label for="date-slider">
+                                Map date
+                            </label>
+
+                            <input
+                                id="date-slider"
+                                type="range"
+                                min="0"
+                                max="1157"
+                                value="0"
+                                disabled
+                            >
+
+                            <output
+                                id="selected-date-output"
+                                for="date-slider"
+                            >
+                                January 21, 2020
+                            </output>
+                        </div>
+
+                        <button
+                            id="reset-exploration-button"
+                            class="secondary-button"
+                            type="button"
+                            disabled
+                        >
+                            Reset scene
+                        </button>
+                    </section>
+
+                    <p
+                        id="interaction-guidance"
+                        class="interaction-guidance"
+                    >
+                        The charts will become interactive after the
+                        data finishes loading.
+                    </p>
+                </aside>
+
+                <div class="chart-column">
+                    <figure
+                        class="chart-panel timeline-panel"
+                        aria-labelledby="timeline-heading"
+                    >
+                        <figcaption>
+                            <div>
+                                <p class="chart-eyebrow">
+                                    National context
+                                </p>
+
+                                <h3 id="timeline-heading">
+                                    Reported cases across the
+                                    United States
+                                </h3>
+                            </div>
+
+                            <p
+                                id="timeline-date-label"
+                                class="chart-value-label"
+                            >
+                                January 2020–March 2023
+                            </p>
+                        </figcaption>
+
+                        <div
+                            id="timeline-chart-container"
+                            class="svg-container timeline-container"
+                        >
+                            <svg
+                                id="timeline-chart"
+                                role="img"
+                                aria-labelledby="timeline-heading timeline-description"
+                            ></svg>
+
+                            <p
+                                id="timeline-description"
+                                class="visually-hidden"
+                            >
+                                A line chart showing the seven-day
+                                average of newly reported COVID-19
+                                cases per 100,000 people in the
+                                United States.
+                            </p>
+                        </div>
+                    </figure>
+
+                    <figure
+                        class="chart-panel map-panel"
+                        aria-labelledby="map-heading"
+                    >
+                        <figcaption>
+                            <div>
+                                <p class="chart-eyebrow">
+                                    Geographic pattern
+                                </p>
+
+                                <h3 id="map-heading">
+                                    Reported cases by state
+                                </h3>
+                            </div>
+
+                            <p
+                                id="map-date-label"
+                                class="chart-value-label"
+                            >
+                                Date selected by the current scene
+                            </p>
+                        </figcaption>
+
+                        <div
+                            id="map-chart-container"
+                            class="svg-container map-container"
+                        >
+                            <svg
+                                id="map-chart"
+                                role="img"
+                                aria-labelledby="map-heading map-description"
+                            ></svg>
+
+                            <p
+                                id="map-description"
+                                class="visually-hidden"
+                            >
+                                A choropleth map showing the
+                                seven-day average of newly reported
+                                COVID-19 cases per 100,000 people
+                                in each state and the District of
+                                Columbia.
+                            </p>
+                        </div>
+
+                        <div
+                            id="map-legend"
+                            class="map-legend"
+                            aria-label="Map color legend"
+                        >
+                            <span class="legend-title">
+                                Cases per 100,000
+                            </span>
+
+                            <div class="legend-items">
+                                <span>
+                                    <i class="legend-swatch level-0"></i>
+                                    Under 10
+                                </span>
+
+                                <span>
+                                    <i class="legend-swatch level-1"></i>
+                                    10–25
+                                </span>
+
+                                <span>
+                                    <i class="legend-swatch level-2"></i>
+                                    25–50
+                                </span>
+
+                                <span>
+                                    <i class="legend-swatch level-3"></i>
+                                    50–100
+                                </span>
+
+                                <span>
+                                    <i class="legend-swatch level-4"></i>
+                                    100–200
+                                </span>
+
+                                <span>
+                                    <i class="legend-swatch level-5"></i>
+                                    Above 200
+                                </span>
+                            </div>
+                        </div>
+                    </figure>
+                </div>
+            </div>
+
+            <div class="scene-navigation">
+                <button
+                    id="previous-scene-button"
+                    class="navigation-button secondary-button"
+                    type="button"
+                    disabled
+                >
+                    <span aria-hidden="true">←</span>
+                    Previous
+                </button>
+
+                <button
+                    id="next-scene-button"
+                    class="navigation-button primary-button"
+                    type="button"
+                    disabled
+                >
+                    Next
+                    <span aria-hidden="true">→</span>
+                </button>
+            </div>
+        </section>
+
+        <section
+            class="methodology-section"
+            aria-labelledby="methodology-heading"
+        >
+            <h2 id="methodology-heading">
+                About the data
+            </h2>
+
+            <p>
+                The charts use seven-day rolling averages of newly
+                reported cases per 100,000 residents. Rates allow
+                states with different population sizes to be compared,
+                while rolling averages reduce day-to-day reporting
+                noise.
+            </p>
+
+            <p>
+                The data represents reported cases rather than every
+                infection. Testing availability, reporting practices,
+                and retrospective revisions changed during the
+                pandemic.
+            </p>
+
+            <p class="source-note">
+                Data:
+                <a
+                    href="https://github.com/nytimes/covid-19-data"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    The New York Times COVID-19 Data Repository
+                </a>.
+                Geographic boundaries:
+                <a
+                    href="https://github.com/topojson/us-atlas"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                >
+                    us-atlas
+                </a>,
+                derived from U.S. Census Bureau cartographic
+                boundaries.
             </p>
         </section>
     </main>
 
+    <div
+        id="chart-tooltip"
+        class="chart-tooltip"
+        role="tooltip"
+        hidden
+    ></div>
+
     <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+
     <script src="js/visualization.js"></script>
 </body>
 </html>
