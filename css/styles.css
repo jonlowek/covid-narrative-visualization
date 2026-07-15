@@ -639,6 +639,42 @@ h1 {
     pointer-events: all;
 }
 
+.state-shape {
+    stroke: #ffffff;
+    stroke-width: 0.85;
+    stroke-linejoin: round;
+    cursor: pointer;
+    vector-effect: non-scaling-stroke;
+}
+
+.state-shape:hover,
+.state-shape:focus-visible,
+.state-shape.hovered {
+    stroke: var(--primary-text);
+    stroke-width: 1.8;
+    outline: none;
+}
+
+.state-shape.selected {
+    stroke: var(--accent-dark);
+    stroke-width: 2.4;
+}
+
+.map-background {
+    fill: transparent;
+}
+
+.map-date-note {
+    fill: var(--secondary-text);
+    font-size: 0.76rem;
+    font-weight: 650;
+    pointer-events: none;
+}
+
+.map-no-data {
+    fill: #e5e7eb;
+}
+
 @media (max-width: 1050px) {
     .scene-layout {
         grid-template-columns: 1fr;

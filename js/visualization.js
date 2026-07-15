@@ -124,6 +124,49 @@ const timelineViewState = {
     resizeAnimationFrame: null,
 };
 
+const mapChartSelection = d3.select(
+    "#map-chart"
+);
+
+const mapChartContainerSelection = d3.select(
+    "#map-chart-container"
+);
+
+const mapDateLabelSelection = d3.select(
+    "#map-date-label"
+);
+
+const interactionGuidanceSelection = d3.select(
+    "#interaction-guidance"
+);
+
+const MAP_COLOR_THRESHOLDS = [
+    10,
+    25,
+    50,
+    100,
+    200,
+];
+
+const MAP_COLOR_RANGE = [
+    "#f3eeee",
+    "#ead5d6",
+    "#dba9ac",
+    "#c6757b",
+    "#a94750",
+    "#74232a",
+];
+
+const mapColorScale = d3
+    .scaleThreshold()
+    .domain(MAP_COLOR_THRESHOLDS)
+    .range(MAP_COLOR_RANGE);
+
+const mapViewState = {
+    resizeObserver: null,
+    resizeAnimationFrame: null,
+};
+
 function positionChartTooltip(pointerEvent) {
     const tooltipNode = chartTooltipSelection.node();
 
@@ -217,6 +260,46 @@ function showTimelineTooltip(
                         .deathsAveragePer100k
                 )}
                 per 100,000
+            `
+        );
+
+    positionChartTooltip(pointerEvent);
+}
+
+function showStateTooltip(
+    pointerEvent,
+    stateDataRow,
+    nationalDataRow,
+    stateRank
+) {
+    chartTooltipSelection
+        .property("hidden", false)
+        .html(
+            `
+                <strong>
+                    ${stateDataRow.stateName}
+                </strong>
+                <br>
+                ${formatFullDate(
+                    stateDataRow.date
+                )}
+                <br>
+                State rate:
+                ${formatRate(
+                    stateDataRow
+                        .casesAveragePer100k
+                )}
+                per 100,000
+                <br>
+                National rate:
+                ${formatRate(
+                    nationalDataRow
+                        .casesAveragePer100k
+                )}
+                per 100,000
+                <br>
+                State rank:
+                ${stateRank} of 51
             `
         );
 
@@ -1036,6 +1119,479 @@ function initializeTimelineResizeObserver() {
     );
 }
 
+function renderStateMap() {
+    if (
+        visualizationData === null
+        || visualizationState.selectedDate
+            === null
+    ) {
+        return;
+    }
+
+    const mapContainerNode =
+        mapChartContainerSelection.node();
+
+    if (mapContainerNode === null) {
+        return;
+    }
+
+    const containerWidth =
+        mapContainerNode.clientWidth;
+
+    const chartWidth = Math.max(
+        360,
+        containerWidth
+    );
+
+    const chartHeight =
+        chartWidth < 620
+            ? 340
+            : Math.min(
+                500,
+                Math.max(
+                    400,
+                    chartWidth * 0.57
+                )
+            );
+
+    const selectedDateKey =
+        formatDateKey(
+            visualizationState.selectedDate
+        );
+
+    const stateRecordsForDate =
+        visualizationData
+            .stateRowsByDate
+            .get(selectedDateKey);
+
+    const nationalDataRow =
+        visualizationData
+            .nationalDataByDate
+            .get(selectedDateKey);
+
+    if (
+        stateRecordsForDate === undefined
+        || nationalDataRow === undefined
+    ) {
+        throw new Error(
+            `Map data was not found for ${selectedDateKey}.`
+        );
+    }
+
+    const rankedStateRecords =
+        Array.from(
+            stateRecordsForDate.values()
+        ).sort(
+            (
+                firstStateRecord,
+                secondStateRecord
+            ) =>
+                d3.descending(
+                    firstStateRecord
+                        .casesAveragePer100k,
+                    secondStateRecord
+                        .casesAveragePer100k
+                )
+        );
+
+    const stateRankByFips = new Map(
+        rankedStateRecords.map(
+            (
+                stateDataRow,
+                stateIndex
+            ) => [
+                stateDataRow.fipsCode,
+                stateIndex + 1,
+            ]
+        )
+    );
+
+    const mapFeatureRows =
+        visualizationData.stateFeatures.map(
+            (stateFeature) => ({
+                stateFeature,
+                stateDataRow:
+                    stateRecordsForDate.get(
+                        stateFeature.id
+                    ),
+            })
+        );
+
+    const featureCollection = {
+        type: "FeatureCollection",
+        features:
+            visualizationData.stateFeatures,
+    };
+
+    const mapProjection = d3
+        .geoAlbersUsa()
+        .fitExtent(
+            [
+                [16, 16],
+                [
+                    chartWidth - 16,
+                    chartHeight - 24,
+                ],
+            ],
+            featureCollection
+        );
+
+    const mapPathGenerator = d3.geoPath(
+        mapProjection
+    );
+
+    mapChartSelection
+        .attr(
+            "viewBox",
+            `0 0 ${chartWidth} ${chartHeight}`
+        )
+        .attr(
+            "preserveAspectRatio",
+            "xMidYMid meet"
+        );
+
+    mapChartContainerSelection
+        .classed("rendered", true)
+        .style(
+            "height",
+            `${chartHeight}px`
+        );
+
+    mapChartSelection
+        .selectAll("*")
+        .remove();
+
+    mapChartSelection
+        .append("rect")
+        .attr(
+            "class",
+            "map-background"
+        )
+        .attr("width", chartWidth)
+        .attr("height", chartHeight);
+
+    const statePathSelection =
+        mapChartSelection
+            .append("g")
+            .attr(
+                "class",
+                "state-layer"
+            )
+            .selectAll(
+                "path.state-shape"
+            )
+            .data(
+                mapFeatureRows,
+                (mapFeatureRow) =>
+                    mapFeatureRow
+                        .stateFeature.id
+            )
+            .join("path")
+            .attr(
+                "class",
+                "state-shape"
+            )
+            .attr(
+                "d",
+                (mapFeatureRow) =>
+                    mapPathGenerator(
+                        mapFeatureRow
+                            .stateFeature
+                    )
+            )
+            .attr(
+                "fill",
+                (mapFeatureRow) => {
+                    if (
+                        mapFeatureRow
+                            .stateDataRow
+                        === undefined
+                    ) {
+                        return "#e5e7eb";
+                    }
+
+                    return mapColorScale(
+                        mapFeatureRow
+                            .stateDataRow
+                            .casesAveragePer100k
+                    );
+                }
+            )
+            .attr("tabindex", 0)
+            .attr(
+                "role",
+                "button"
+            )
+            .attr(
+                "aria-label",
+                (mapFeatureRow) => {
+                    const stateDataRow =
+                        mapFeatureRow
+                            .stateDataRow;
+
+                    if (
+                        stateDataRow
+                        === undefined
+                    ) {
+                        return (
+                            mapFeatureRow
+                                .stateFeature
+                                .properties
+                                .stateName
+                            + ": no data"
+                        );
+                    }
+
+                    return (
+                        `${stateDataRow.stateName}: `
+                        + `${formatRate(
+                            stateDataRow
+                                .casesAveragePer100k
+                        )} reported cases `
+                        + "per 100,000 on "
+                        + `${formatFullDate(
+                            stateDataRow.date
+                        )}.`
+                    );
+                }
+            );
+
+    function displayStateDetails(
+        pointerEvent,
+        mapFeatureRow
+    ) {
+        const stateDataRow =
+            mapFeatureRow.stateDataRow;
+
+        if (stateDataRow === undefined) {
+            return;
+        }
+
+        visualizationState.hoveredState =
+            stateDataRow.fipsCode;
+
+        statePathSelection.classed(
+            "hovered",
+            (candidateFeatureRow) =>
+                candidateFeatureRow
+                    .stateFeature.id
+                === stateDataRow.fipsCode
+        );
+
+        showStateTooltip(
+            pointerEvent,
+            stateDataRow,
+            nationalDataRow,
+            stateRankByFips.get(
+                stateDataRow.fipsCode
+            )
+        );
+    }
+
+    function clearStateDetails() {
+        visualizationState.hoveredState =
+            null;
+
+        statePathSelection.classed(
+            "hovered",
+            false
+        );
+
+        hideChartTooltip();
+    }
+
+    statePathSelection
+        .on(
+            "pointerenter",
+            displayStateDetails
+        )
+        .on(
+            "pointermove",
+            displayStateDetails
+        )
+        .on(
+            "pointerleave",
+            clearStateDetails
+        )
+        .on(
+            "focus",
+            function (
+                focusEvent,
+                mapFeatureRow
+            ) {
+                const stateDataRow =
+                    mapFeatureRow
+                        .stateDataRow;
+
+                if (
+                    stateDataRow
+                    === undefined
+                ) {
+                    return;
+                }
+
+                visualizationState
+                    .hoveredState =
+                    stateDataRow.fipsCode;
+
+                statePathSelection.classed(
+                    "hovered",
+                    (
+                        candidateFeatureRow
+                    ) =>
+                        candidateFeatureRow
+                            .stateFeature.id
+                        === stateDataRow
+                            .fipsCode
+                );
+
+                chartTooltipSelection
+                    .property(
+                        "hidden",
+                        false
+                    )
+                    .html(
+                        `
+                            <strong>
+                                ${
+                                    stateDataRow
+                                        .stateName
+                                }
+                            </strong>
+                            <br>
+                            ${formatFullDate(
+                                stateDataRow
+                                    .date
+                            )}
+                            <br>
+                            State rate:
+                            ${formatRate(
+                                stateDataRow
+                                    .casesAveragePer100k
+                            )}
+                            per 100,000
+                            <br>
+                            National rate:
+                            ${formatRate(
+                                nationalDataRow
+                                    .casesAveragePer100k
+                            )}
+                            per 100,000
+                            <br>
+                            State rank:
+                            ${stateRankByFips.get(
+                                stateDataRow
+                                    .fipsCode
+                            )}
+                            of 51
+                        `
+                    );
+
+                const statePathBounds =
+                    this
+                        .getBoundingClientRect();
+
+                const syntheticPointerEvent = {
+                    clientX:
+                        statePathBounds.left
+                        + statePathBounds.width
+                            / 2,
+                    clientY:
+                        statePathBounds.top
+                        + statePathBounds.height
+                            / 2,
+                };
+
+                positionChartTooltip(
+                    syntheticPointerEvent
+                );
+            }
+        )
+        .on(
+            "blur",
+            clearStateDetails
+        );
+
+    mapChartSelection
+        .append("text")
+        .attr(
+            "class",
+            "map-date-note"
+        )
+        .attr(
+            "x",
+            chartWidth - 18
+        )
+        .attr(
+            "y",
+            chartHeight - 10
+        )
+        .attr(
+            "text-anchor",
+            "end"
+        )
+        .text(
+            `Seven-day average on ${formatFullDate(
+                visualizationState
+                    .selectedDate
+            )}`
+        );
+
+    mapDateLabelSelection.text(
+        formatFullDate(
+            visualizationState.selectedDate
+        )
+    );
+}
+
+function initializeMapResizeObserver() {
+    const mapContainerNode =
+        mapChartContainerSelection.node();
+
+    if (
+        mapContainerNode === null
+        || mapViewState.resizeObserver
+            !== null
+    ) {
+        return;
+    }
+
+    if (
+        typeof ResizeObserver
+        === "function"
+    ) {
+        mapViewState.resizeObserver =
+            new ResizeObserver(() => {
+                if (
+                    mapViewState
+                        .resizeAnimationFrame
+                    !== null
+                ) {
+                    cancelAnimationFrame(
+                        mapViewState
+                            .resizeAnimationFrame
+                    );
+                }
+
+                mapViewState
+                    .resizeAnimationFrame =
+                    requestAnimationFrame(
+                        renderStateMap
+                    );
+            });
+
+        mapViewState.resizeObserver
+            .observe(mapContainerNode);
+
+        return;
+    }
+
+    window.addEventListener(
+        "resize",
+        renderStateMap
+    );
+}
+
 async function initializeVisualization() {
     if (
         typeof topojson === "undefined"
@@ -1152,7 +1708,16 @@ async function initializeVisualization() {
 
     renderNationalTimeline();
 
+    renderStateMap();
+
     initializeTimelineResizeObserver();
+
+    initializeMapResizeObserver();
+
+    interactionGuidanceSelection.text(
+        SCENE_DEFINITIONS[0]
+            .interactionGuidance
+    );
 
     applicationStatusSelection.text(
         `Loaded ${formatWholeNumber(nationalDataRows.length)} national dates, ${formatWholeNumber(stateDataRows.length)} state records, and ${stateFeatures.length} map features.`
