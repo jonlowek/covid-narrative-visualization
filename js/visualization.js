@@ -112,6 +112,10 @@ const stateSelectionControl = d3.select(
     "#state-selection"
 );
 
+const stateSelectionGroupSelection = d3.select(
+    "#state-selection-group"
+);
+
 const dateSliderControl = d3.select(
     "#date-slider"
 );
@@ -194,6 +198,10 @@ const annotationTextSelection = d3.select(
 
 const timelineDateLabelSelection = d3.select(
     "#timeline-date-label"
+);
+
+const timelineComparisonLabelSelection = d3.select(
+    "#timeline-comparison-label"
 );
 
 const previousSceneButtonSelection = d3.select(
@@ -307,6 +315,40 @@ function showTimelineTooltip(
     pointerEvent,
     nationalDataRow
 ) {
+    let stateComparisonMarkup = "";
+
+    if (
+        visualizationData !== null
+        && visualizationState.selectedState
+            !== null
+    ) {
+        const selectedStateRecord =
+            visualizationData
+                .stateRowsByDate
+                .get(
+                    nationalDataRow.dateKey
+                )
+                ?.get(
+                    visualizationState
+                        .selectedState
+                );
+
+        if (
+            selectedStateRecord !== undefined
+        ) {
+            stateComparisonMarkup = `
+                <br>
+                ${selectedStateRecord.stateName}
+                rate:
+                ${formatRate(
+                    selectedStateRecord
+                        .casesAveragePer100k
+                )}
+                per 100,000
+            `;
+        }
+    }
+
     chartTooltipSelection
         .property("hidden", false)
         .html(
@@ -323,12 +365,13 @@ function showTimelineTooltip(
                 )}
                 seven-day average
                 <br>
-                Case rate:
+                National rate:
                 ${formatRate(
                     nationalDataRow
                         .casesAveragePer100k
                 )}
                 per 100,000
+                ${stateComparisonMarkup}
                 <br>
                 Death rate:
                 ${formatRate(
@@ -809,7 +852,18 @@ function updateExplorationControls() {
         !explorationIsAvailable
     );
 
+    stateSelectionGroupSelection.property(
+        "hidden",
+        !explorationIsAvailable
+    );
+
     dateSliderControl.property(
+        "disabled",
+        !explorationIsAvailable
+        || visualizationState.isTransitioning
+    );
+
+    stateSelectionControl.property(
         "disabled",
         !explorationIsAvailable
         || visualizationState.isTransitioning
@@ -819,15 +873,6 @@ function updateExplorationControls() {
         "disabled",
         !explorationIsAvailable
         || visualizationState.isTransitioning
-    );
-
-    /*
-     * State comparison will be enabled in the next
-     * implementation step.
-     */
-    stateSelectionControl.property(
-        "disabled",
-        true
     );
 }
 
@@ -1075,6 +1120,45 @@ function updateSceneFourExplorationText() {
         )} reported cases per 100,000.`
     );
 
+    if (
+        visualizationState.selectedState
+        !== null
+    ) {
+        const selectedStateRecord =
+            stateRecordsForDate.get(
+                visualizationState
+                    .selectedState
+            );
+
+        if (
+            selectedStateRecord !== undefined
+        ) {
+            const selectedStateRank =
+                rankedStateRecords.findIndex(
+                    (stateRecord) =>
+                        stateRecord.fipsCode
+                        === selectedStateRecord
+                            .fipsCode
+                ) + 1;
+
+            annotationTextSelection.text(
+                `${selectedStateRecord.stateName} reported ${formatRate(
+                    selectedStateRecord
+                        .casesAveragePer100k
+                )} cases per 100,000, ranking ${selectedStateRank} of 51. ${highestStateRecord.stateName} had the highest rate at ${formatRate(
+                    highestStateRecord
+                        .casesAveragePer100k
+                )}.`
+            );
+
+            interactionGuidanceSelection.text(
+                "Select another state, click a state on the map, or move the date slider to continue comparing patterns."
+            );
+
+            return;
+        }
+    }
+
     annotationTextSelection.text(
         `${highestStateRecord.stateName} had the highest state rate at ${formatRate(
             highestStateRecord
@@ -1083,7 +1167,62 @@ function updateSceneFourExplorationText() {
     );
 
     interactionGuidanceSelection.text(
-        "Move the date slider to examine how the geographic pattern changed, or reset to the January 2022 peak."
+        "Select a state or click it on the map to compare its full timeline with the national curve."
+    );
+}
+
+function applySceneFourStateSelection(
+    requestedFipsCode
+) {
+    if (
+        visualizationData === null
+        || visualizationState.currentSceneIndex !== 3
+        || visualizationState.isTransitioning
+    ) {
+        return;
+    }
+
+    const normalizedFipsCode =
+        requestedFipsCode === ""
+        || requestedFipsCode === null
+        || requestedFipsCode === undefined
+            ? null
+            : String(
+                requestedFipsCode
+            ).padStart(2, "0");
+
+    if (
+        normalizedFipsCode !== null
+        && !visualizationData
+            .stateNameByFips
+            .has(normalizedFipsCode)
+    ) {
+        throw new Error(
+            `Unknown state FIPS code: ${normalizedFipsCode}`
+        );
+    }
+
+    visualizationState.selectedState =
+        normalizedFipsCode;
+
+    stateSelectionControl.property(
+        "value",
+        normalizedFipsCode ?? ""
+    );
+
+    updateSceneFourExplorationText();
+
+    hideChartTooltip();
+
+    renderNationalTimeline();
+
+    renderStateMap({
+        animateMap: false,
+    });
+
+    console.log(
+        "Scene 4 state selection changed:",
+        visualizationState
     );
 }
 
@@ -1332,6 +1471,9 @@ async function applyScene(
         visualizationState
             .currentSceneIndex;
 
+    const previousSelectedState =
+        visualizationState.selectedState;
+
     const shouldAnimate =
         previousDate !== null
         && previousSceneIndex
@@ -1400,6 +1542,10 @@ async function applyScene(
     }
 
     hideChartTooltip();
+
+    if (previousSelectedState !== null) {
+        renderNationalTimeline();
+    }
 
     try {
         await Promise.all([
@@ -1472,6 +1618,15 @@ function initializeSceneTriggers() {
         }
     );
 
+    stateSelectionControl.on(
+        "change",
+        function () {
+            applySceneFourStateSelection(
+                this.value
+            );
+        }
+    );
+
     dateSliderControl.on(
         "input",
         function () {
@@ -1487,7 +1642,15 @@ function initializeSceneTriggers() {
 
     resetExplorationButtonSelection.on(
         "click",
-        () => {
+        async () => {
+            visualizationState.selectedState =
+                null;
+
+            stateSelectionControl.property(
+                "value",
+                ""
+            );
+
             const resetDateIndex =
                 visualizationData
                     .nationalDataRows
@@ -1498,13 +1661,15 @@ function initializeSceneTriggers() {
                             === "2022-01-14"
                     );
 
-            applySceneFourDateIndex(
+            await applySceneFourDateIndex(
                 resetDateIndex,
                 {
                     animateMap: true,
                     restoreNarrative: true,
                 }
             );
+
+            renderNationalTimeline();
         }
     );
 
@@ -1782,18 +1947,68 @@ function renderNationalTimeline() {
     const nationalDataRows =
         visualizationData.nationalDataRows;
 
+    const selectedStateSeries =
+        visualizationState.selectedState
+            === null
+            ? null
+            : visualizationData
+                .stateSeriesByFips
+                .get(
+                    visualizationState
+                        .selectedState
+                )
+                ?? null;
+
+    const selectedStateName =
+        visualizationState.selectedState
+            === null
+            ? null
+            : visualizationData
+                .stateNameByFips
+                .get(
+                    visualizationState
+                        .selectedState
+                )
+                ?? null;
+
     const dateExtent = d3.extent(
         nationalDataRows,
         (nationalDataRow) =>
             nationalDataRow.date
     );
 
-    const maximumCaseRate = d3.max(
+    const maximumNationalCaseRate = d3.max(
         nationalDataRows,
         (nationalDataRow) =>
             nationalDataRow
                 .casesAveragePer100k
+    ) ?? 0;
+
+    const maximumSelectedStateRate =
+        selectedStateSeries === null
+            ? 0
+            : d3.max(
+                selectedStateSeries,
+                (stateDataRow) =>
+                    stateDataRow
+                        .casesAveragePer100k
+            ) ?? 0;
+
+    const maximumCaseRate = Math.max(
+        maximumNationalCaseRate,
+        maximumSelectedStateRate
     );
+
+    timelineComparisonLabelSelection
+        .property(
+            "hidden",
+            selectedStateName === null
+        )
+        .text(
+            selectedStateName === null
+                ? ""
+                : `National rate compared with ${selectedStateName}`
+        );
 
     const dateScale = d3
         .scaleUtc()
@@ -1982,6 +2197,37 @@ function renderNationalTimeline() {
             "d",
             nationalLineGenerator
         );
+
+    if (selectedStateSeries !== null) {
+        const selectedStateLineGenerator = d3
+            .line()
+            .x(
+                (stateDataRow) =>
+                    dateScale(
+                        stateDataRow.date
+                    )
+            )
+            .y(
+                (stateDataRow) =>
+                    caseRateScale(
+                        stateDataRow
+                            .casesAveragePer100k
+                    )
+            )
+            .curve(d3.curveMonotoneX);
+
+        chartGroup
+            .append("path")
+            .datum(selectedStateSeries)
+            .attr(
+                "class",
+                "state-comparison-line"
+            )
+            .attr(
+                "d",
+                selectedStateLineGenerator
+            );
+    }
     
     const timelineSceneMarkerGroup =
         chartGroup
@@ -2404,6 +2650,14 @@ function renderStateMap({
                 "class",
                 "state-shape"
             )
+            .classed(
+                "selected",
+                (mapFeatureRow) =>
+                    mapFeatureRow
+                        .stateFeature.id
+                    === visualizationState
+                        .selectedState
+            )
             .attr(
                 "d",
                 (mapFeatureRow) =>
@@ -2660,6 +2914,78 @@ function renderStateMap({
         .on(
             "blur",
             clearStateDetails
+        )
+        .on(
+            "click",
+            function (
+                pointerEvent,
+                mapFeatureRow
+            ) {
+                if (
+                    visualizationState
+                        .currentSceneIndex !== 3
+                    || mapFeatureRow
+                        .stateDataRow
+                        === undefined
+                ) {
+                    return;
+                }
+
+                const clickedFipsCode =
+                    mapFeatureRow
+                        .stateFeature.id;
+
+                const nextFipsCode =
+                    visualizationState
+                        .selectedState
+                    === clickedFipsCode
+                        ? null
+                        : clickedFipsCode;
+
+                applySceneFourStateSelection(
+                    nextFipsCode
+                );
+            }
+        )
+        .on(
+            "keydown",
+            function (
+                keyboardEvent,
+                mapFeatureRow
+            ) {
+                if (
+                    visualizationState
+                        .currentSceneIndex !== 3
+                    || mapFeatureRow
+                        .stateDataRow
+                        === undefined
+                    || (
+                        keyboardEvent.key
+                            !== "Enter"
+                        && keyboardEvent.key
+                            !== " "
+                    )
+                ) {
+                    return;
+                }
+
+                keyboardEvent.preventDefault();
+
+                const selectedFipsCode =
+                    mapFeatureRow
+                        .stateFeature.id;
+
+                const nextFipsCode =
+                    visualizationState
+                        .selectedState
+                    === selectedFipsCode
+                        ? null
+                        : selectedFipsCode;
+
+                applySceneFourStateSelection(
+                    nextFipsCode
+                );
+            }
         );
 
     mapChartSelection
