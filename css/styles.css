@@ -772,6 +772,46 @@ h1 {
     fill: #e5e7eb;
 }
 
+.scene-annotation {
+    pointer-events: none;
+}
+
+.scene-annotation-connector {
+    stroke: var(--primary-text);
+    stroke-width: 1.2;
+    stroke-linecap: round;
+    opacity: 0.75;
+    vector-effect: non-scaling-stroke;
+}
+
+.scene-annotation-anchor {
+    fill: #ffffff;
+    stroke: var(--accent-dark);
+    stroke-width: 2.5;
+    vector-effect: non-scaling-stroke;
+}
+
+.scene-annotation-box {
+    fill: rgba(255, 255, 255, 0.97);
+    stroke: var(--strong-border-color);
+    stroke-width: 1;
+    filter: drop-shadow(
+        0 4px 8px rgba(24, 33, 43, 0.15)
+    );
+}
+
+.scene-annotation-title {
+    fill: var(--primary-text);
+    font-size: 0.78rem;
+    font-weight: 800;
+}
+
+.scene-annotation-line {
+    fill: var(--secondary-text);
+    font-size: 0.74rem;
+    font-weight: 600;
+}
+
 @media (max-width: 1050px) {
     .scene-layout {
         grid-template-columns: 1fr;

@@ -150,6 +150,7 @@ const TIMELINE_MARGINS = {
 const timelineViewState = {
     resizeObserver: null,
     resizeAnimationFrame: null,
+    chartGroup: null,
     dateScale: null,
     caseRateScale: null,
     innerWidth: 0,
@@ -250,6 +251,184 @@ const mapViewState = {
     resizeObserver: null,
     resizeAnimationFrame: null,
 };
+
+function appendSvgCallout({
+    parentSelection,
+    anchorX,
+    anchorY,
+    boxX,
+    boxY,
+    boxWidth = 205,
+    title,
+    lines,
+    animateAnnotation = false,
+}) {
+    const lineHeight = 18;
+    const boxPadding = 13;
+
+    const boxHeight =
+        39
+        + lines.length * lineHeight;
+
+    const parentNode =
+        parentSelection.node();
+
+    const parentBounds =
+        parentNode === null
+            ? null
+            : parentNode
+                .ownerSVGElement
+                ?.viewBox
+                ?.baseVal;
+
+    const maximumWidth =
+        parentBounds?.width
+        ?? Number.POSITIVE_INFINITY;
+
+    const maximumHeight =
+        parentBounds?.height
+        ?? Number.POSITIVE_INFINITY;
+
+    const boundedBoxX = Math.max(
+        8,
+        Math.min(
+            maximumWidth
+                - boxWidth
+                - 8,
+            boxX
+        )
+    );
+
+    const boundedBoxY = Math.max(
+        8,
+        Math.min(
+            maximumHeight
+                - boxHeight
+                - 8,
+            boxY
+        )
+    );
+
+    const connectorEndX = Math.max(
+        boundedBoxX,
+        Math.min(
+            anchorX,
+            boundedBoxX + boxWidth
+        )
+    );
+
+    const connectorEndY = Math.max(
+        boundedBoxY,
+        Math.min(
+            anchorY,
+            boundedBoxY + boxHeight
+        )
+    );
+
+    const annotationGroup =
+        parentSelection
+            .append("g")
+            .attr(
+                "class",
+                "scene-annotation"
+            )
+            .style(
+                "opacity",
+                animateAnnotation
+                    ? 0
+                    : 1
+            );
+
+    annotationGroup
+        .append("line")
+        .attr(
+            "class",
+            "scene-annotation-connector"
+        )
+        .attr("x1", anchorX)
+        .attr("y1", anchorY)
+        .attr("x2", connectorEndX)
+        .attr("y2", connectorEndY);
+
+    annotationGroup
+        .append("circle")
+        .attr(
+            "class",
+            "scene-annotation-anchor"
+        )
+        .attr("cx", anchorX)
+        .attr("cy", anchorY)
+        .attr("r", 4.5);
+
+    annotationGroup
+        .append("rect")
+        .attr(
+            "class",
+            "scene-annotation-box"
+        )
+        .attr("x", boundedBoxX)
+        .attr("y", boundedBoxY)
+        .attr("width", boxWidth)
+        .attr("height", boxHeight)
+        .attr("rx", 8)
+        .attr("ry", 8);
+
+    annotationGroup
+        .append("text")
+        .attr(
+            "class",
+            "scene-annotation-title"
+        )
+        .attr(
+            "x",
+            boundedBoxX + boxPadding
+        )
+        .attr(
+            "y",
+            boundedBoxY + 20
+        )
+        .text(title);
+
+    annotationGroup
+        .selectAll(
+            "text.scene-annotation-line"
+        )
+        .data(lines)
+        .join("text")
+        .attr(
+            "class",
+            "scene-annotation-line"
+        )
+        .attr(
+            "x",
+            boundedBoxX + boxPadding
+        )
+        .attr(
+            "y",
+            (
+                annotationLine,
+                annotationLineIndex
+            ) =>
+                boundedBoxY
+                + 40
+                + annotationLineIndex
+                    * lineHeight
+        )
+        .text(
+            (annotationLine) =>
+                annotationLine
+        );
+
+    if (animateAnnotation) {
+        annotationGroup
+            .transition()
+            .delay(400)
+            .duration(300)
+            .style("opacity", 1);
+    }
+
+    return annotationGroup;
+}
 
 function positionChartTooltip(pointerEvent) {
     const tooltipNode = chartTooltipSelection.node();
@@ -1543,6 +1722,8 @@ async function applyScene(
 
     hideChartTooltip();
 
+    refreshTimelineSceneAnnotation();
+
     if (previousSelectedState !== null) {
         renderNationalTimeline();
     }
@@ -1714,6 +1895,111 @@ function initializeSceneTriggers() {
             }
         }
     );
+}
+
+function renderTimelineSceneAnnotation({
+    chartGroup,
+    dateScale,
+    caseRateScale,
+    innerWidth,
+}) {
+    chartGroup
+        .selectAll(".timeline-peak-annotation")
+        .remove();
+
+    const annotationShouldBeVisible =
+        visualizationState.currentSceneIndex === 0
+        || visualizationState.currentSceneIndex === 3;
+
+    if (
+        visualizationData === null
+        || !annotationShouldBeVisible
+    ) {
+        return;
+    }
+
+    const peakNationalDataRow =
+        visualizationData
+            .nationalDataRows
+            .reduce(
+                (
+                    highestRow,
+                    candidateRow
+                ) =>
+                    candidateRow
+                        .casesAveragePer100k
+                    > highestRow
+                        .casesAveragePer100k
+                        ? candidateRow
+                        : highestRow
+            );
+
+    const anchorX = dateScale(
+        peakNationalDataRow.date
+    );
+
+    const anchorY = caseRateScale(
+        peakNationalDataRow
+            .casesAveragePer100k
+    );
+
+    const annotationWidth = 205;
+
+    const annotationX = Math.max(
+        12,
+        Math.min(
+            innerWidth
+                - annotationWidth
+                - 12,
+            anchorX - annotationWidth - 20
+        )
+    );
+
+    const peakAnnotationGroup =
+        appendSvgCallout({
+            parentSelection: chartGroup,
+            anchorX,
+            anchorY,
+            boxX: annotationX,
+            boxY: 17,
+            boxWidth: annotationWidth,
+            title: "The largest national peak",
+            lines: [
+                formatFullDate(
+                    peakNationalDataRow.date
+                ),
+                `${formatRate(
+                    peakNationalDataRow
+                        .casesAveragePer100k
+                )} cases per 100,000`,
+            ],
+        });
+
+    peakAnnotationGroup.classed(
+        "timeline-peak-annotation",
+        true
+    );
+}
+
+function refreshTimelineSceneAnnotation() {
+    if (
+        timelineViewState.chartGroup === null
+        || timelineViewState.dateScale === null
+        || timelineViewState.caseRateScale === null
+    ) {
+        return;
+    }
+
+    renderTimelineSceneAnnotation({
+        chartGroup:
+            timelineViewState.chartGroup,
+        dateScale:
+            timelineViewState.dateScale,
+        caseRateScale:
+            timelineViewState.caseRateScale,
+        innerWidth:
+            timelineViewState.innerWidth,
+    });
 }
 
 function updateTimelineSceneMarker(
@@ -2064,6 +2350,8 @@ function renderNationalTimeline() {
                     ${TIMELINE_MARGINS.top}
                 )`
             );
+    
+    timelineViewState.chartGroup = chartGroup;
 
     chartGroup
         .append("g")
@@ -2228,6 +2516,8 @@ function renderNationalTimeline() {
                 selectedStateLineGenerator
             );
     }
+
+    refreshTimelineSceneAnnotation();
     
     const timelineSceneMarkerGroup =
         chartGroup
@@ -2429,6 +2719,241 @@ function initializeTimelineResizeObserver() {
         "resize",
         renderNationalTimeline
     );
+}
+
+function renderMapSceneAnnotation({
+    mapPathGenerator,
+    featureCollection,
+    chartWidth,
+    chartHeight,
+    rankedStateRecords,
+    stateRankByFips,
+    animateAnnotation,
+}) {
+    if (
+        visualizationData === null
+        || visualizationState
+            .currentSceneIndex === 0
+        || visualizationState
+            .selectedDate === null
+    ) {
+        return;
+    }
+
+    const selectedDateKey =
+        formatDateKey(
+            visualizationState.selectedDate
+        );
+
+    const stateRecordsForDate =
+        visualizationData
+            .stateRowsByDate
+            .get(selectedDateKey);
+
+    if (stateRecordsForDate === undefined) {
+        return;
+    }
+
+    const highestStateRecord =
+        rankedStateRecords[0];
+
+    const jurisdictionsAbove50 =
+        rankedStateRecords.filter(
+            (stateRecord) =>
+                stateRecord
+                    .casesAveragePer100k
+                > 50
+        ).length;
+
+    const jurisdictionsAbove100 =
+        rankedStateRecords.filter(
+            (stateRecord) =>
+                stateRecord
+                    .casesAveragePer100k
+                > 100
+        ).length;
+
+    let targetFipsCode = null;
+    let annotationTitle = "";
+    let annotationLines = [];
+    let annotationAnchor = null;
+
+    if (
+        visualizationState
+            .currentSceneIndex === 1
+    ) {
+        targetFipsCode = "36";
+        annotationTitle =
+            "Northeast concentration";
+
+        annotationLines = [
+            "New York: 50.77 per 100,000",
+            "More than 5× the national rate",
+        ];
+    } else if (
+        visualizationState
+            .currentSceneIndex === 2
+    ) {
+        targetFipsCode =
+            highestStateRecord.fipsCode;
+
+        annotationTitle =
+            selectedDateKey === "2020-04-10"
+                ? "The first hotspot"
+                : "The hotspot moved";
+
+        annotationLines = [
+            `${highestStateRecord.stateName}: ${formatRate(
+                highestStateRecord
+                    .casesAveragePer100k
+            )} per 100,000`,
+            selectedDateKey === "2020-04-10"
+                ? "Concentrated in the Northeast"
+                : "Highest rates shifted south and west",
+        ];
+    } else if (
+        visualizationState
+            .currentSceneIndex === 3
+        && visualizationState
+            .selectedState !== null
+    ) {
+        targetFipsCode =
+            visualizationState
+                .selectedState;
+
+        const selectedStateRecord =
+            stateRecordsForDate.get(
+                targetFipsCode
+            );
+
+        if (
+            selectedStateRecord === undefined
+        ) {
+            return;
+        }
+
+        annotationTitle =
+            selectedStateRecord.stateName;
+
+        annotationLines = [
+            `${formatRate(
+                selectedStateRecord
+                    .casesAveragePer100k
+            )} cases per 100,000`,
+            `Rank ${stateRankByFips.get(
+                targetFipsCode
+            )} of 51`,
+        ];
+    } else if (
+        visualizationState
+            .currentSceneIndex === 3
+        && selectedDateKey
+            === "2022-01-14"
+    ) {
+        annotationAnchor =
+            mapPathGenerator.centroid(
+                featureCollection
+            );
+
+        annotationTitle =
+            "A nationwide surge";
+
+        annotationLines = [
+            "51 of 51 exceeded 50",
+            "50 of 51 exceeded 100",
+        ];
+    } else {
+        targetFipsCode =
+            highestStateRecord.fipsCode;
+
+        annotationTitle =
+            "Highest reported rate";
+
+        annotationLines = [
+            `${highestStateRecord.stateName}: ${formatRate(
+                highestStateRecord
+                    .casesAveragePer100k
+            )} per 100,000`,
+            `${jurisdictionsAbove50} above 50; ${jurisdictionsAbove100} above 100`,
+        ];
+    }
+
+    if (
+        annotationAnchor === null
+        && targetFipsCode !== null
+    ) {
+        const targetFeature =
+            visualizationData
+                .stateFeatures
+                .find(
+                    (stateFeature) =>
+                        stateFeature.id
+                        === targetFipsCode
+                );
+
+        if (targetFeature === undefined) {
+            return;
+        }
+
+        annotationAnchor =
+            mapPathGenerator.centroid(
+                targetFeature
+            );
+    }
+
+    if (
+        annotationAnchor === null
+        || !Number.isFinite(
+            annotationAnchor[0]
+        )
+        || !Number.isFinite(
+            annotationAnchor[1]
+        )
+    ) {
+        return;
+    }
+
+    const [
+        anchorX,
+        anchorY,
+    ] = annotationAnchor;
+
+    const annotationWidth = 215;
+
+    const estimatedBoxHeight =
+        39
+        + annotationLines.length * 18;
+
+    const annotationX =
+        anchorX > chartWidth * 0.52
+            ? 18
+            : chartWidth
+                - annotationWidth
+                - 18;
+
+    const annotationY = Math.max(
+        18,
+        Math.min(
+            chartHeight
+                - estimatedBoxHeight
+                - 18,
+            anchorY
+                - estimatedBoxHeight / 2
+        )
+    );
+
+    appendSvgCallout({
+        parentSelection:
+            mapChartSelection,
+        anchorX,
+        anchorY,
+        boxX: annotationX,
+        boxY: annotationY,
+        boxWidth: annotationWidth,
+        title: annotationTitle,
+        lines: annotationLines,
+        animateAnnotation,
+    });
 }
 
 function renderStateMap({
@@ -2987,6 +3512,17 @@ function renderStateMap({
                 );
             }
         );
+
+    renderMapSceneAnnotation({
+        mapPathGenerator,
+        featureCollection,
+        chartWidth,
+        chartHeight,
+        rankedStateRecords,
+        stateRankByFips,
+        animateAnnotation:
+            animateMap,
+    });
 
     mapChartSelection
         .append("text")
