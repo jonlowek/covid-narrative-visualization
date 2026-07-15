@@ -1,0 +1,120 @@
+{
+  "title": "One Curve, Fifty Outbreaks",
+  "generated_utc": "2026-07-15T20:12:41.573494+00:00",
+  "source": {
+    "publisher": "The New York Times",
+    "repository": "https://github.com/nytimes/covid-19-data",
+    "national_file": "https://raw.githubusercontent.com/nytimes/covid-19-data/master/rolling-averages/us.csv",
+    "state_file": "https://raw.githubusercontent.com/nytimes/covid-19-data/master/rolling-averages/us-states.csv",
+    "archive_end_date": "2023-03-23"
+  },
+  "scope": {
+    "national_series": "United States",
+    "map_jurisdictions": "50 states and the District of Columbia",
+    "jurisdiction_count": 51
+  },
+  "records": {
+    "national": 1158,
+    "states_and_district": 59058,
+    "filled_leading_zero_records": 2070
+  },
+  "date_ranges": {
+    "national": {
+      "start": "2020-01-21",
+      "end": "2023-03-23"
+    },
+    "states_and_district": {
+      "start": "2020-01-21",
+      "end": "2023-03-23"
+    }
+  },
+  "scene_statistics": {
+    "2020-04-10": {
+      "national_cases_avg_per_100k": 9.55,
+      "median_state_cases_avg_per_100k": 3.81,
+      "jurisdictions_above_25": 3,
+      "jurisdictions_above_50": 1,
+      "jurisdictions_above_100": 0,
+      "top_states": [
+        {
+          "state": "New York",
+          "cases_avg_per_100k": 50.77
+        },
+        {
+          "state": "New Jersey",
+          "cases_avg_per_100k": 39.72
+        },
+        {
+          "state": "Louisiana",
+          "cases_avg_per_100k": 27.52
+        },
+        {
+          "state": "Connecticut",
+          "cases_avg_per_100k": 22.53
+        },
+        {
+          "state": "Massachusetts",
+          "cases_avg_per_100k": 21.91
+        }
+      ]
+    },
+    "2020-07-25": {
+      "national_cases_avg_per_100k": 20.13,
+      "median_state_cases_avg_per_100k": 13.79,
+      "jurisdictions_above_25": 13,
+      "jurisdictions_above_50": 1,
+      "jurisdictions_above_100": 0,
+      "top_states": [
+        {
+          "state": "Florida",
+          "cases_avg_per_100k": 51.18
+        },
+        {
+          "state": "Louisiana",
+          "cases_avg_per_100k": 46.54
+        },
+        {
+          "state": "Mississippi",
+          "cases_avg_per_100k": 44.41
+        },
+        {
+          "state": "Alabama",
+          "cases_avg_per_100k": 37.57
+        },
+        {
+          "state": "Arizona",
+          "cases_avg_per_100k": 36.75
+        }
+      ]
+    },
+    "2022-01-14": {
+      "national_cases_avg_per_100k": 243.15,
+      "median_state_cases_avg_per_100k": 218.89,
+      "jurisdictions_above_25": 51,
+      "jurisdictions_above_50": 51,
+      "jurisdictions_above_100": 50,
+      "top_states": [
+        {
+          "state": "Rhode Island",
+          "cases_avg_per_100k": 486.05
+        },
+        {
+          "state": "Delaware",
+          "cases_avg_per_100k": 341.88
+        },
+        {
+          "state": "New York",
+          "cases_avg_per_100k": 324.23
+        },
+        {
+          "state": "Utah",
+          "cases_avg_per_100k": 304.39
+        },
+        {
+          "state": "Massachusetts",
+          "cases_avg_per_100k": 303.34
+        }
+      ]
+    }
+  }
+}
