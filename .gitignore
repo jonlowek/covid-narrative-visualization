@@ -1,0 +1,11 @@
+# Original source datasets downloaded for preprocessing
+data/raw/
+
+# Python-generated cache files
+__pycache__/
+*.pyc
+
+# Common editor and operating-system files
+.vscode/
+.DS_Store
+Thumbs.db
