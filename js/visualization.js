@@ -72,6 +72,26 @@ const SCENE_DEFINITIONS = [
     },
 ];
 
+const SCENE_THREE_COMPARISON_CONTENT = {
+    "2020-04-10": {
+        description:
+            "This reference view shows the early concentration in the Northeast before the summer hotspot shifted south and west.",
+        annotation:
+            "New York reported 50.77 cases per 100,000, while the median state reported only 3.81. Just three jurisdictions exceeded 25.",
+        interactionGuidance:
+            "Select July 25 to see how the highest reported rates moved south and west.",
+    },
+
+    "2020-07-25": {
+        description:
+            "The geographic center of the outbreak changed rather than expanding uniformly from the first affected states.",
+        annotation:
+            "Florida had the highest reported rate, followed by Louisiana and Mississippi. Thirteen jurisdictions exceeded 25 cases per 100,000.",
+        interactionGuidance:
+            "Select April 10 to compare the summer pattern with the first major outbreak.",
+    },
+};
+
 const visualizationState = {
     currentSceneIndex: 0,
     selectedDate: null,
@@ -182,6 +202,14 @@ const nextSceneButtonSelection = d3.select(
 
 const explorationControlsSelection = d3.select(
     "#exploration-controls"
+);
+
+const comparisonControlsSelection = d3.select(
+    "#comparison-controls"
+);
+
+const comparisonButtonSelection = d3.selectAll(
+    ".comparison-button"
 );
 
 const MAP_COLOR_THRESHOLDS = [
@@ -768,6 +796,50 @@ function initializeStateParameters(
     );
 }
 
+function updateComparisonControls() {
+    const comparisonIsAvailable =
+        visualizationState.currentSceneIndex === 2;
+
+    comparisonControlsSelection.property(
+        "hidden",
+        !comparisonIsAvailable
+    );
+
+    if (!comparisonIsAvailable) {
+        return;
+    }
+
+    const selectedDateKey = formatDateKey(
+        visualizationState.selectedDate
+    );
+
+    comparisonButtonSelection
+        .property(
+            "disabled",
+            visualizationState.isTransitioning
+        )
+        .classed(
+            "active",
+            function () {
+                return (
+                    this.dataset.comparisonDate
+                    === selectedDateKey
+                );
+            }
+        )
+        .attr(
+            "aria-pressed",
+            function () {
+                return (
+                    this.dataset.comparisonDate
+                    === selectedDateKey
+                )
+                    ? "true"
+                    : "false";
+            }
+        );
+}
+
 function updateSceneNavigationControls() {
     const currentSceneIndex =
         visualizationState.currentSceneIndex;
@@ -895,6 +967,111 @@ function updateDateControls() {
     );
 }
 
+async function applySceneThreeComparisonDate(
+    requestedDateKey
+) {
+    if (
+        visualizationData === null
+        || visualizationState.currentSceneIndex !== 2
+        || visualizationState.isTransitioning
+    ) {
+        return;
+    }
+
+    const comparisonContent =
+        SCENE_THREE_COMPARISON_CONTENT[
+            requestedDateKey
+        ];
+
+    const requestedNationalDataRow =
+        visualizationData
+            .nationalDataByDate
+            .get(requestedDateKey);
+
+    if (
+        comparisonContent === undefined
+        || requestedNationalDataRow === undefined
+    ) {
+        throw new Error(
+            `Invalid Scene 3 comparison date: ${requestedDateKey}`
+        );
+    }
+
+    const currentDateKey = formatDateKey(
+        visualizationState.selectedDate
+    );
+
+    if (currentDateKey === requestedDateKey) {
+        return;
+    }
+
+    const previousDate =
+        visualizationState.selectedDate;
+
+    const alternateDateKey =
+        requestedDateKey === "2020-04-10"
+            ? "2020-07-25"
+            : "2020-04-10";
+
+    visualizationState.isTransitioning = true;
+
+    visualizationState.selectedDate =
+        requestedNationalDataRow.date;
+
+    visualizationState.comparisonDate =
+        visualizationData
+            .nationalDataByDate
+            .get(alternateDateKey)
+            .date;
+
+    sceneDescriptionSelection.text(
+        comparisonContent.description
+    );
+
+    annotationTextSelection.text(
+        comparisonContent.annotation
+    );
+
+    interactionGuidanceSelection.text(
+        comparisonContent
+            .interactionGuidance
+    );
+
+    timelineDateLabelSelection.text(
+        formatFullDate(
+            visualizationState.selectedDate
+        )
+    );
+
+    updateDateControls();
+    updateSceneNavigationControls();
+    updateComparisonControls();
+    hideChartTooltip();
+
+    try {
+        await Promise.all([
+            renderStateMap({
+                previousDate,
+                previousSceneIndex: 2,
+                animateMap: true,
+            }),
+
+            updateTimelineSceneMarker(true),
+        ]);
+    } finally {
+        visualizationState.isTransitioning =
+            false;
+
+        updateSceneNavigationControls();
+        updateComparisonControls();
+    }
+
+    console.log(
+        `Scene 3 comparison changed to ${requestedDateKey}:`,
+        visualizationState
+    );
+}
+
 async function applyScene(
     requestedSceneIndex
 ) {
@@ -982,6 +1159,8 @@ async function applyScene(
         true
     );
 
+    updateComparisonControls();
+
     if (boundedSceneIndex === 0) {
         timelineDateLabelSelection.text(
             "January 2020–March 2023"
@@ -1015,6 +1194,7 @@ async function applyScene(
             false;
 
         updateSceneNavigationControls();
+        updateComparisonControls();
     }
 
     console.log(
@@ -1057,6 +1237,15 @@ function initializeSceneTriggers() {
         }
     );
 
+    comparisonButtonSelection.on(
+        "click",
+        function () {
+            applySceneThreeComparisonDate(
+                this.dataset.comparisonDate
+            );
+        }
+    );
+
     window.addEventListener(
         "keydown",
         (keyboardEvent) => {
@@ -1067,7 +1256,9 @@ function initializeSceneTriggers() {
                 activeElement
                 instanceof HTMLInputElement
                 || activeElement
-                instanceof HTMLSelectElement;
+                instanceof HTMLSelectElement
+                || activeElement
+                instanceof HTMLButtonElement;
 
             if (isFormControl) {
                 return;

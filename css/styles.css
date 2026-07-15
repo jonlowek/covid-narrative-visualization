@@ -295,6 +295,62 @@ h1 {
     line-height: 1.5;
 }
 
+.comparison-controls {
+    margin-top: 26px;
+    padding-top: 22px;
+    border-top: 1px solid var(--border-color);
+}
+
+.comparison-controls h3 {
+    margin: 0 0 8px;
+    font-size: 0.9rem;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.control-help {
+    margin: 0 0 14px;
+    color: var(--secondary-text);
+    font-size: 0.88rem;
+    line-height: 1.5;
+}
+
+.segmented-control {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 7px;
+    padding: 5px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    background-color: var(--panel-background);
+}
+
+.comparison-button {
+    min-height: 39px;
+    padding: 7px 10px;
+    border: 1px solid transparent;
+    border-radius: 7px;
+    color: var(--secondary-text);
+    background-color: transparent;
+    font-weight: 700;
+}
+
+.comparison-button:not(:disabled):hover {
+    border-color: var(--strong-border-color);
+    color: var(--primary-text);
+    background-color: var(--secondary-background);
+}
+
+.comparison-button.active {
+    border-color: var(--accent-color);
+    color: #ffffff;
+    background-color: var(--accent-color);
+}
+
+.comparison-button:disabled {
+    opacity: 0.55;
+}
+
 .exploration-controls {
     margin-top: 26px;
     padding-top: 22px;

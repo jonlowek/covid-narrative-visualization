@@ -169,6 +169,46 @@
                     </section>
 
                     <section
+                        id="comparison-controls"
+                        class="comparison-controls"
+                        aria-labelledby="comparison-heading"
+                        hidden
+                    >
+                        <h3 id="comparison-heading">
+                            Compare the shift
+                        </h3>
+
+                        <p class="control-help">
+                            Switch between the early Northeast
+                            concentration and the summer hotspot.
+                        </p>
+
+                        <div
+                            class="segmented-control"
+                            role="group"
+                            aria-label="Compare April and July 2020"
+                        >
+                            <button
+                                class="comparison-button"
+                                type="button"
+                                data-comparison-date="2020-04-10"
+                                aria-pressed="false"
+                            >
+                                April 10
+                            </button>
+
+                            <button
+                                class="comparison-button active"
+                                type="button"
+                                data-comparison-date="2020-07-25"
+                                aria-pressed="true"
+                            >
+                                July 25
+                            </button>
+                        </div>
+                    </section>
+
+                    <section
                         id="exploration-controls"
                         class="exploration-controls"
                         aria-labelledby="exploration-heading"
